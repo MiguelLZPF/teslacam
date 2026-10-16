@@ -271,6 +271,7 @@ export type ActionKind =
   | 'reverse'
   | 'autopilot_on'
   | 'autopilot_off'
+  | 'hard'
 
 export interface ActionMarker {
   /** Seconds from the start of this segment (mapped to event time by the caller). */
@@ -282,6 +283,9 @@ export interface ActionMarker {
  *  samples within this gap turns one manoeuvre into one marker instead of a
  *  cluster of them. */
 const ACTION_MERGE_GAP_S = 1.5
+
+/** Horizontal acceleration (m/s2) above which a moment is marked as hard braking or a swerve. */
+export const HARD_ACCEL_MPS2 = 4
 
 /**
  * One marker per manoeuvre. A boolean signal (blinker, brake, reverse) marks the
@@ -309,6 +313,7 @@ export function detectActions(samples: Telemetry[], fps: number = CLIP_FPS): Act
   risingPeriods((t) => t.blinkerRight, 'blinker_right')
   risingPeriods((t) => t.braking, 'brake')
   risingPeriods((t) => t.gear === 'reverse', 'reverse')
+  risingPeriods((t) => Math.hypot(t.accelX, t.accelY) > HARD_ACCEL_MPS2, 'hard')
 
   let apOn = false
   for (const s of samples) {

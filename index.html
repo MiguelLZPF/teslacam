@@ -4,13 +4,18 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0b0d0e" />
+    <meta name="theme-color" content="#000000" />
     <meta name="description" content="View and export your Tesla dashcam recordings. Everything happens in your browser." />
     <!-- Nothing here is public and nothing is uploaded, but a viewer for
          someone's own dashcam footage has no business in a search index. -->
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <title>TeslaCam</title>
+    <link rel="icon" href="/icon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- use-credentials: the manifest is fetched without cookies by default, and the
+         Authentik gate in front of this site would answer that fetch with a redirect. -->
+    <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
+    <title>Nyx Footage</title>
   </head>
   <body>
     <div id="root"></div>

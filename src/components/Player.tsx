@@ -26,6 +26,8 @@ import { buildIndex, extractTelemetry, type Telemetry } from '../lib/sei'
 const DRIFT_TOLERANCE = 0.08     // seconds before a camera is pulled back
 
 export interface PlayerProps {
+  /** Fill the parent: the cameras take the largest box of the right shape that fits. */
+  fit?: boolean
   event: TeslaEvent
   cameras: Camera[]
   layout: LayoutName
@@ -44,7 +46,7 @@ export interface PlayerProps {
 }
 
 export default function Player({
-  event, cameras, layout, main, onMain, overlay, lang,
+  fit, event, cameras, layout, main, onMain, overlay, lang,
   onTime, onTelemetry, seekTo, playing, rate, onEnded,
 }: PlayerProps) {
   const present = useMemo(() => camerasIn(event).filter((c) => cameras.includes(c)), [event, cameras])
@@ -52,6 +54,24 @@ export default function Player({
 
   // Only the car layout has a large slot to swap into.
   const swappable = Boolean(onMain) && layout === 'tesla' && present.length === 4
+  const wrap = useRef<HTMLDivElement>(null)
+  const [fitSize, setFitSize] = useState<{ w: number; h: number } | null>(null)
+  const ratio = layout === 'tesla' && present.length === 4 ? 4 / 3 : ratioOf(aspectFor(layout, present.length))
+  useEffect(() => {
+    if (!fit) return
+    const el = wrap.current
+    if (!el) return
+    const measure = () => {
+      const r = el.getBoundingClientRect()
+      const w = Math.max(0, Math.min(r.width, r.height * ratio))
+      setFitSize({ w, h: w / ratio })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [fit, ratio])
+
   const refs = useRef(new Map<Camera, HTMLVideoElement>())
   const hud = useRef<HTMLCanvasElement>(null)
   const [index, setIndex] = useState(0)
@@ -209,9 +229,11 @@ export default function Player({
     }
   }
 
-  return (
+  const body = (
     <div className="relative w-full overflow-hidden rounded-xl bg-black"
-         style={{ aspectRatio: layout === 'tesla' && present.length === 4 ? '4 / 3' : undefined }}>
+         style={fit && fitSize
+           ? { width: fitSize.w, height: fitSize.h }
+           : { aspectRatio: layout === 'tesla' && present.length === 4 ? '4 / 3' : undefined }}>
       <div className="relative h-full w-full" style={{ aspectRatio: aspectFor(layout, present.length) }}>
         {present.map((cam) => {
           const box = boxes.get(cam)
@@ -266,6 +288,14 @@ export default function Player({
       )}
     </div>
   )
+  return fit ? (
+    <div ref={wrap} className="grid h-full w-full place-items-center">{body}</div>
+  ) : body
+}
+
+function ratioOf(a: string): number {
+  const [w, h] = a.split('/').map((x) => Number(x.trim()))
+  return w / h
 }
 
 /** The shape of the composed view, so the container does not letterbox twice. */

@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react'
-import type { EventAction, TeslaEvent } from '../lib/library'
+import { JUMP_LEAD_S, type EventAction, type PeakMark, type TeslaEvent } from '../lib/library'
 import type { ActionKind } from '../lib/sei'
 
 /** What each manoeuvre is called, and the colour that marks it. Amber for the
@@ -26,6 +26,7 @@ const ACTION_LABEL: Record<ActionKind, string> = {
   reverse: 'Reversing',
   autopilot_on: 'Autopilot on',
   autopilot_off: 'Autopilot off',
+  hard: 'Hard braking or swerve',
 }
 const ACTION_COLOR: Record<ActionKind, string> = {
   blinker_left: '#e8a33d',
@@ -34,11 +35,12 @@ const ACTION_COLOR: Record<ActionKind, string> = {
   reverse: '#f97316',
   autopilot_on: '#5ad1c4',
   autopilot_off: '#7d8a8f',
+  hard: '#e879f9',
 }
 /** Order the legend and stack markers by, so overlapping markers show the more
  *  notable manoeuvre on top. */
 const ACTION_ORDER: ActionKind[] = [
-  'brake', 'reverse', 'autopilot_on', 'autopilot_off', 'blinker_left', 'blinker_right',
+  'hard', 'brake', 'reverse', 'autopilot_on', 'autopilot_off', 'blinker_left', 'blinker_right',
 ]
 
 export interface TimelineProps {
@@ -50,6 +52,8 @@ export interface TimelineProps {
   outSec: number
   /** Manoeuvres pulled from telemetry, in whole-event seconds. */
   actions?: EventAction[]
+  /** The triage's peaks: the trigger (strong) and the other kept windows. */
+  peaks?: PeakMark[]
   onSeek: (t: number) => void
   onIn: (t: number) => void
   onOut: (t: number) => void
@@ -66,7 +70,7 @@ type Grab = 'in' | 'out' | 'playhead'
 const MIN_SELECTION = 0.5
 
 export default function Timeline({
-  event, duration, time, inSec, outSec, actions = [], onSeek, onIn, onOut, onWhole, disabled,
+  event, duration, time, inSec, outSec, actions = [], peaks = [], onSeek, onIn, onOut, onWhole, disabled,
 }: TimelineProps) {
   const track = useRef<HTMLDivElement>(null)
   const grabbed = useRef<Grab | null>(null)
@@ -130,8 +134,40 @@ export default function Timeline({
     (a, b) => ACTION_ORDER.indexOf(b.kind) - ACTION_ORDER.indexOf(a.kind),
   )
 
+  // Clicking a peak lands a few seconds before it, so the run-up is in view.
+  const seekPeak = (m: PeakMark) => onSeek(Math.max(0, m.atSec - JUMP_LEAD_S))
+
   return (
     <div className="select-none">
+      {/* Peak markers: a coloured notch with the score above it. The trigger peak
+          is the tall accent one; the other kept windows are smaller and amber. */}
+      {peaks.length > 0 && (
+        <div className="relative mb-1 h-8">
+          {peaks.map((m, i) => (
+            <button
+              key={`peak-${i}-${m.atSec.toFixed(1)}`}
+              type="button"
+              disabled={disabled}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => seekPeak(m)}
+              title={`${m.title} at ${clock(m.atSec)}. Click to jump ${JUMP_LEAD_S} s before it.`}
+              aria-label={`${m.title} at ${clock(m.atSec)}`}
+              className="absolute bottom-0 flex -translate-x-1/2 cursor-pointer flex-col items-center disabled:cursor-default"
+              style={{ left: pct(m.atSec), zIndex: m.strong ? 2 : 1 }}
+            >
+              <span className="num leading-none"
+                    style={{ fontSize: m.strong ? 12 : 10, fontWeight: m.strong ? 700 : 500,
+                             color: m.strong ? '#5ad1c4' : '#e8a33d' }}>
+                {m.label}
+              </span>
+              <span className="mt-0.5 block rounded-sm"
+                    style={{ width: m.strong ? 4 : 2, height: m.strong ? 14 : 9,
+                             background: m.strong ? '#5ad1c4' : '#e8a33d' }} />
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Manoeuvre markers, above the track so they never sit under the trim
           handles or the scrub area. Click one to jump to it. */}
       {actions.length > 0 && (
@@ -191,6 +227,13 @@ export default function Timeline({
           <div key={`line-${a.kind}-${a.atSec.toFixed(2)}-${i}`}
                className="pointer-events-none absolute inset-y-0 w-px opacity-60"
                style={{ left: pct(a.atSec), background: ACTION_COLOR[a.kind] }} />
+        ))}
+
+        {peaks.map((m, i) => (
+          <div key={`peakline-${i}-${m.atSec.toFixed(1)}`}
+               className="pointer-events-none absolute inset-y-0"
+               style={{ left: pct(m.atSec), width: m.strong ? 3 : 1,
+                        background: m.strong ? '#5ad1c4' : '#e8a33d', opacity: m.strong ? 0.9 : 0.6 }} />
         ))}
 
         {/* Playhead */}

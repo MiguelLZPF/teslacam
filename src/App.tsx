@@ -7,7 +7,7 @@
  * browser on your machine.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ExportBar from './components/ExportBar'
 import Library from './components/Library'
 import Picker from './components/Picker'
@@ -16,7 +16,8 @@ import Timeline, { clock } from './components/Timeline'
 import type { LayoutName, OverlayOptions, Unit } from './lib/compose'
 import { loadMainCamera, saveMainCamera } from './lib/prefs'
 import {
-  BASE_CAMERAS, CAMERA_LABEL, CAMERAS, JUMP_LEAD_S, camerasIn, collectActions, eventSeconds, measureDurations,
+  BASE_CAMERAS, CAMERA_LABEL, CAMERAS, JUMP_LEAD_S, camerasIn, collectActions, eventPeaks, eventSeconds,
+  measureDurations,
   segmentStart,
   type Camera, type EventAction, type TeslaEvent,
 } from './lib/library'
@@ -42,6 +43,29 @@ export default function App() {
   const [overlay, setOverlay] = useState<Omit<OverlayOptions, 'unit'>>({
     speed: true, clock: true, gear: true, place: true, labels: true,
   })
+
+  // Player view: only the cameras, the overlay and the controls. Fullscreen is the
+  // same view in a real fullscreen window; Esc leaves both.
+  const [playerView, setPlayerView] = useState(false)
+  const fsEntered = useRef(false)
+  const setView = (on: boolean) => {
+    setPlayerView(on)
+    if (!on && fsEntered.current) {
+      fsEntered.current = false
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+    }
+  }
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {})
+      return
+    }
+    setPlayerView(true)
+    if (document.documentElement.requestFullscreen) {
+      fsEntered.current = true
+      void document.documentElement.requestFullscreen().catch(() => { fsEntered.current = false })
+    }
+  }
 
   const [playing, setPlaying] = useState(true)
   const [rate, setRate] = useState<number>(1)
@@ -121,11 +145,29 @@ export default function App() {
       if (e.key === 'i' || e.key === 'I') setInSec(Math.min(time, (outSec ?? end) - 0.5))
       else if (e.key === 'o' || e.key === 'O') setOutSec(Math.max(time, inSec + 0.5))
       else if (e.key === ' ') { e.preventDefault(); setPlaying((p) => !p) }
+      else if ((e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        toggleFullscreen()
+      }
+      else if (e.key === 'Escape' && playerView && !document.fullscreenElement) setView(false)
       else return
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, time, inSec, outSec, end])
+  }, [selected, time, inSec, outSec, end, playerView])
+
+  // Esc in fullscreen is handled by the browser: it leaves fullscreen and fires
+  // this, and the player view that fullscreen opened closes with it.
+  useEffect(() => {
+    const onChange = () => {
+      if (!document.fullscreenElement && fsEntered.current) {
+        fsEntered.current = false
+        setPlayerView(false)
+      }
+    }
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
 
   if (!library) return <Picker onLoaded={(evts) => setLibrary(evts)} />
 
@@ -141,8 +183,10 @@ export default function App() {
   const duration = Math.max(eventSeconds(selected), total)
 
   return (
-    <div className="mx-auto max-w-6xl px-3 pb-16 pt-3 sm:px-5">
-      <header className="mb-3 flex flex-wrap items-center gap-3">
+    <div className={playerView
+      ? 'flex h-dvh w-full flex-col gap-2 px-2 py-2'
+      : 'mx-auto w-full max-w-[1800px] px-3 pb-16 pt-3 sm:px-5'}>
+      <header className={'mb-3 flex flex-wrap items-center gap-3' + (playerView ? ' hidden' : '')}>
         <button className="btn" onClick={() => { setSelected(null); setPlaying(false) }}>
           ← All recordings
         </button>
@@ -166,7 +210,9 @@ export default function App() {
           <p className="mt-1 text-sm text-faint">Playback is paused meanwhile.</p>
         </div>
       ) : (
+        <div className={playerView ? 'min-h-0 flex-1' : 'h-[72dvh]'}>
         <Player
+          fit
           event={selected}
           cameras={cameras}
           layout={layout}
@@ -181,10 +227,11 @@ export default function App() {
           rate={rate}
           onEnded={() => setPlaying(false)}
         />
+        </div>
       )}
 
       {/* Transport and the cut */}
-      <div className="card mt-3 px-4 py-3">
+      <div className={'card px-4 py-3' + (playerView ? '' : ' mt-3')}>
         <div className="mb-3 flex items-center gap-3">
           <button className="btn shrink-0" onClick={() => setPlaying(!playing)}
                   aria-label={playing ? 'Pause' : 'Play'}>
@@ -192,6 +239,15 @@ export default function App() {
           </button>
           <span className="num shrink-0 text-sm text-muted">
             {clock(time)} / {clock(duration)}
+          </span>
+          <span className="ml-auto flex items-center gap-2">
+            <button className="chip" aria-pressed={playerView}
+                    onClick={() => setView(!playerView)}>
+              {playerView ? 'Exit player view' : 'Player view'}
+            </button>
+            <button className="chip" onClick={toggleFullscreen} title="Key F">
+              Fullscreen (F)
+            </button>
           </span>
         </div>
 
@@ -202,6 +258,7 @@ export default function App() {
           inSec={inSec}
           outSec={outSec ?? duration}
           actions={actions}
+          peaks={eventPeaks(selected)}
           disabled={exporting}
           onSeek={(t) => { setPlaying(false); setSeekTo(t); setTime(t) }}
           onIn={(t) => setInSec(Math.max(0, t))}
@@ -249,6 +306,7 @@ export default function App() {
 
         {/* The export acts on the selection above it, so it lives in the same
             card rather than in a dialog that covers the picture. */}
+        <div className={playerView ? 'hidden' : ''}>
         <ExportBar
           event={selected}
           cameras={cameras}
@@ -259,10 +317,11 @@ export default function App() {
           toSec={outSec ?? duration}
           onBusy={(busy) => { if (busy) setPlaying(false); setExporting(busy) }}
         />
+        </div>
       </div>
 
       {/* Readout and overlay switches */}
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <div className={'mt-3 grid gap-3 sm:grid-cols-2' + (playerView ? ' hidden' : '')}>
         <div className="card px-4 py-3">
           <h2 className="eyebrow">Telemetry</h2>
           {noTelemetry ? (

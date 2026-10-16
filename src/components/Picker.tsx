@@ -12,7 +12,10 @@
  * hosts this page and nothing else.
  */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import {
+  canRememberFolder, ensureRead, forgetNasHandle, loadNasHandle, saveNasHandle,
+} from '../lib/nas'
 import type { TeslaEvent } from '../lib/library'
 import { scanLibrary, type ScanProgress } from '../lib/library'
 
@@ -61,6 +64,13 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
   const [busy, setBusy] = useState<ScanProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const input = useRef<HTMLInputElement>(null)
+  // The remembered NAS folder: undefined while loading, null when none is stored.
+  const [nas, setNas] = useState<FileSystemDirectoryHandle | null | undefined>(undefined)
+  useEffect(() => {
+    let live = true
+    void loadNasHandle().then((h) => { if (live) setNas(h) })
+    return () => { live = false }
+  }, [])
 
   const scan = async (handle: any) => {
     setError(null)
@@ -75,8 +85,10 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
       }
       onLoaded(events)
     } catch (e) {
-      setError(e instanceof Error && e.name === 'AbortError'
-        ? '' : 'The folder could not be read.')
+      setError(e instanceof Error && e.name === 'AbortError' ? ''
+        : e instanceof Error && e.name === 'NotFoundError'
+          ? 'The folder is not there. If it is the NAS, mount the share first and try again.'
+          : 'The folder could not be read.')
     } finally {
       setBusy(null)
     }
@@ -92,6 +104,33 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
       setBusy(null)
     }
   }
+
+  // One click per visit: ask for read access on the remembered folder again, or
+  // on the first visit pick it (the NAS share, for example /Volumes/tesla).
+  const openNas = async () => {
+    setError(null)
+    try {
+      let handle = nas
+      if (handle) {
+        if (!(await ensureRead(handle))) {
+          setError('Access to the folder was not granted. Try again and choose Allow.')
+          return
+        }
+      } else {
+        handle = await (window as any).showDirectoryPicker({ mode: 'read', id: 'tesla-nas' })
+        if (handle) {
+          const kept = await saveNasHandle(handle)
+          if (kept) setNas(handle)
+        }
+      }
+      if (handle) await scan(handle)
+    } catch (e) {
+      if ((e as Error)?.name !== 'AbortError') setError('The folder could not be opened.')
+      setBusy(null)
+    }
+  }
+
+  const forget = async () => { await forgetNasHandle(); setNas(null) }
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-12">
@@ -122,17 +161,46 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
         onChange={(e) => e.target.files?.length && scan(handleFromFileList(e.target.files))}
       />
 
-      <div className="mt-7 flex flex-wrap gap-3">
-        {hasDirectoryPicker() ? (
-          <button className="btn btn-primary" onClick={pick} disabled={Boolean(busy)}>
-            Choose TeslaCam folder
+      {canRememberFolder() ? (
+        <div className="mt-7">
+          <button
+            className="btn btn-primary w-full !py-4 text-lg"
+            onClick={openNas}
+            disabled={Boolean(busy) || nas === undefined}
+          >
+            Open NAS footage
           </button>
-        ) : (
-          <label htmlFor="dirinput" className="btn btn-primary tap cursor-pointer">
-            Choose TeslaCam folder
-          </label>
-        )}
-      </div>
+          <p className="mt-2 text-sm text-muted">
+            {nas
+              ? <>Remembered folder: <span className="num">{nas.name}</span>. One click, then Allow when the browser asks.</>
+              : 'The first time, choose the Tesla share (for example /Volumes/tesla). The browser remembers it for next time.'}
+            {nas && (
+              <button className="ml-2 underline" onClick={forget}>Forget it</button>
+            )}
+          </p>
+          <div className="mt-4">
+            <button className="btn !px-3 !py-1.5 text-sm" onClick={pick} disabled={Boolean(busy)}>
+              Open another folder
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-7 flex flex-wrap gap-3">
+          {hasDirectoryPicker() ? (
+            <button className="btn btn-primary" onClick={pick} disabled={Boolean(busy)}>
+              Choose TeslaCam folder
+            </button>
+          ) : (
+            <label htmlFor="dirinput" className="btn btn-primary tap cursor-pointer">
+              Choose TeslaCam folder
+            </label>
+          )}
+          <p className="w-full text-sm text-muted">
+            This browser cannot remember a folder between visits, so pick it each time.
+            Chrome or Edge can remember the NAS folder.
+          </p>
+        </div>
+      )}
 
       {!hasDirectoryPicker() && (
         <p className="mt-3 text-sm text-warn">

@@ -86,6 +86,28 @@ export interface Verdict {
   accel?: number
   peakSec?: number
   jump?: { segmentIndex: number; atSec: number }
+  /** Window key of the kept window that gave the event its label, when written. */
+  triggerKey?: string
+  /** Every kept window's own peak, when the triage wrote `keeps`. */
+  keeps?: Keep[]
+}
+
+/** One kept window: its clip, and the peak the triage scored in it. */
+export interface Keep {
+  segmentIndex: number
+  kind: 'badas' | 'impact'
+  prob?: number
+  accel?: number
+  peakSec: number
+}
+
+/** A peak placed on the timeline in whole-event seconds. */
+export interface PeakMark {
+  atSec: number
+  label: string
+  /** The trigger peak; the others are the event's other kept windows. */
+  strong: boolean
+  title: string
 }
 
 export interface EventMeta {
@@ -251,6 +273,21 @@ export function parseVerdict(text: string, segments: Segment[]): Verdict | undef
   const im = LABEL_IMPACT.exec(label)
   if (b) { v.kind = 'badas'; v.prob = Number(b[1]); v.peakSec = Number(b[2]) }
   else if (im) { v.kind = 'impact'; v.accel = Number(im[1]); v.peakSec = Number(im[2]) }
+  if (typeof j.trigger_key === 'string') v.triggerKey = j.trigger_key
+
+  if (Array.isArray(j.keeps)) {
+    const keeps: Keep[] = []
+    for (const k of j.keeps) {
+      if (!k || typeof k.key !== 'string' || typeof k.reason !== 'string') continue
+      const idx = segments.findIndex((s) => s.key === k.key)
+      if (idx < 0) continue
+      const kb = LABEL_BADAS.exec(k.reason)
+      const ki = LABEL_IMPACT.exec(k.reason)
+      if (kb) keeps.push({ segmentIndex: idx, kind: 'badas', prob: Number(kb[1]), peakSec: Number(kb[2]) })
+      else if (ki) keeps.push({ segmentIndex: idx, kind: 'impact', accel: Number(ki[1]), peakSec: Number(ki[2]) })
+    }
+    if (keeps.length) v.keeps = keeps
+  }
 
   if (v.peakSec !== undefined) {
     // Which clip the peak second counts from. verdict.json does not say unless
@@ -325,6 +362,41 @@ async function listDirs(
     if (handle.kind === 'directory') out.set(name, handle)
   }
   return out
+}
+
+const peakLabel = (m: { kind: 'badas' | 'impact'; prob?: number; accel?: number }) =>
+  m.kind === 'badas' ? m.prob!.toFixed(2) : m.accel!.toFixed(1)
+
+/**
+ * Where the triage's peaks sit on the event timeline, in whole-event seconds:
+ * the trigger peak (strong) and, when verdict.json lists them, every other kept
+ * window's peak. A peak counts from the start of its own window's clip, so a
+ * window that is not in this event is skipped, and so is the trigger when the
+ * file does not say which window it was.
+ */
+export function eventPeaks(event: TeslaEvent): PeakMark[] {
+  const v = event.verdict
+  if (!v) return []
+  const out: PeakMark[] = []
+  const trigIdx = v.jump?.segmentIndex
+  if (v.jump && v.kind && v.peakSec !== undefined) {
+    out.push({
+      atSec: segmentStart(event, v.jump.segmentIndex) + v.jump.atSec,
+      label: peakLabel(v as any),
+      strong: true,
+      title: v.kind === 'badas' ? `Trigger peak, BADAS ${peakLabel(v as any)}` : `Trigger peak, impact ${peakLabel(v as any)} m/s2`,
+    })
+  }
+  for (const k of v.keeps ?? []) {
+    if (k.segmentIndex === trigIdx && trigIdx !== undefined) continue
+    out.push({
+      atSec: segmentStart(event, k.segmentIndex) + k.peakSec,
+      label: peakLabel(k),
+      strong: false,
+      title: k.kind === 'badas' ? `Kept window peak, BADAS ${peakLabel(k)}` : `Kept window peak, impact ${peakLabel(k)} m/s2`,
+    })
+  }
+  return out.sort((a, b) => a.atSec - b.atSec)
 }
 
 /** Total running time of an event, assuming the usual minute per segment.
