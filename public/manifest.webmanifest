@@ -1,7 +1,7 @@
 {
-  "name": "Nyx Footage",
-  "short_name": "Footage",
-  "description": "View Nyx dashcam footage from the NAS, in the browser. Nothing is uploaded.",
+  "name": "TeslaCam Viewer",
+  "short_name": "TeslaCam Viewer",
+  "description": "View Tesla dashcam footage in the browser. Nothing is uploaded.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
