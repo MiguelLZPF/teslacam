@@ -22,10 +22,12 @@
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
 import { DataStream, Endianness, MP4BoxBuffer, createFile, type Movie, type Sample } from 'mp4box'
 
+import { pictureRect, type Placement } from './arrange'
 import {
-  canvasSize, contain, drawCameraLabel, drawOverlay, layoutFor,
+  drawLabelAt, drawOverlay,
   type LayoutName, type OverlayOptions,
 } from './compose'
+import { exportBitrate, planExport, type Native } from './exportplan'
 import { CAMERAS, type Camera, type TeslaEvent } from './library'
 import { CLIP_FPS, buildIndex, extractTelemetry, type Telemetry } from './sei'
 
@@ -36,6 +38,8 @@ export interface ExportRequest {
   overlay: OverlayOptions
   /** The camera shown large in the car layout. */
   main?: Camera
+  /** Whether the other cameras sit in a column beside the main one or a row beneath it, as on screen. */
+  placement?: Placement
   /** In and out points in whole-event seconds - the timeline's two handles.
    *  Cutting used to be by whole one-minute files, which meant exporting a
    *  four-second near-miss produced a minute of driving around it. */
@@ -235,6 +239,11 @@ class FrameStream {
       description: src.description,
       optimizeForLatency: false,
     })
+    // Feed more whenever the decoder takes a chunk, not only when it returns a
+    // frame: a decoder that holds several chunks before its first output (a
+    // software H.264 decoder with a deep reorder window) otherwise never gets
+    // past the lookahead and the export stalls at frame zero.
+    this.decoder.addEventListener('dequeue', () => this.pump())
     this.pump()
   }
 
@@ -329,8 +338,26 @@ export async function exportVideo(
   const cams = CAMERAS.filter((c) => req.cameras.includes(c))
   if (!cams.length) throw new Error('Choose at least one camera')
 
-  const layout = layoutFor(req.layout, cams, req.main)
-  const size = canvasSize(layout)
+  const parts = planTrim(req.event, req.fromSec, req.toSec)
+  if (!parts.length) throw new Error('The selection is empty')
+
+  // Read the first part's cameras up front: their real sizes decide the size and
+  // layout of the output, and the first loop pass reuses them.
+  const demuxPart = async (index: number) => {
+    const seg = req.event.segments[index]
+    const found = new Map<Camera, Demuxed>()
+    for (const cam of cams) {
+      const file = seg.files[cam]
+      if (file) found.set(cam, await demux(file))
+    }
+    return found
+  }
+  onProgress({ phase: 'preparing', segment: 0, segments: parts.length, frames: 0, fraction: 0 })
+  let preloaded: Map<Camera, Demuxed> | null = await demuxPart(parts[0].index)
+  const natives = new Map<Camera, Native>()
+  for (const [cam, src] of preloaded) natives.set(cam, { w: src.width, h: src.height })
+  const plan = planExport(req.layout, cams, req.main, natives, req.placement)
+  const size = { w: plan.width, h: plan.height }
   const canvas = new OffscreenCanvas(size.w, size.h)
   const ctx = canvas.getContext('2d')!
 
@@ -350,14 +377,12 @@ export async function exportVideo(
     codec: 'avc1.4d0034',            // Main profile, level 5.2: 2560x1440 fits
     width: size.w,
     height: size.h,
-    // Tesla's own clips are about 5 Mbit each, so a composite needs room or
-    // the export looks worse than the source it came from.
-    bitrate: 4_000_000 + cams.length * 2_000_000,
+    // Scaled with the pixels: Tesla's own clips are about 5 Mbit each, so a
+    // composite needs room or the export looks worse than the source.
+    bitrate: exportBitrate(size.w, size.h, CLIP_FPS),
     framerate: CLIP_FPS,
   })
 
-  const parts = planTrim(req.event, req.fromSec, req.toSec)
-  if (!parts.length) throw new Error('The selection is empty')
   const wanted = parts.reduce((n, p) => n + (p.toOffset - p.fromOffset), 0)
   let written = 0
   let done = 0                      // seconds of the selection already written
@@ -373,11 +398,8 @@ export async function exportVideo(
         frames: written, fraction: done / wanted,
       })
 
-      const sources = new Map<Camera, Demuxed>()
-      for (const cam of cams) {
-        const file = seg.files[cam]
-        if (file) sources.set(cam, await demux(file))
-      }
+      const sources = preloaded ?? await demuxPart(part.index)
+      preloaded = null
       if (!sources.size) continue
 
       // The HUD reads from whichever camera carries the most telemetry: the
@@ -414,20 +436,39 @@ export async function exportVideo(
           ctx.fillStyle = '#000'
           ctx.fillRect(0, 0, size.w, size.h)
 
-          for (const [cam, rect] of layout) {
+          // Each camera in its own box at its own aspect: the box is cut to the
+          // frame's shape, so nothing is stretched even if a clip differs from
+          // the first one's size.
+          let overlayRegion = { x: 0, y: 0, w: size.w, h: size.h }
+          for (const [cam, box] of plan.rects) {
             const frame = frames.get(cam)
             if (!frame) continue
-            const box = contain(rect, size)
-            ctx.drawImage(frame, box.x, box.y, box.w, box.h)
-            if (req.overlay.labels) drawCameraLabel(ctx as any, cam, rect, size, req.lang)
+            const fw = frame.displayWidth || frame.codedWidth
+            const fh = frame.displayHeight || frame.codedHeight
+            const p = pictureRect(box, fw / fh, 'fit')
+            const pic = { x: box.x + p.x, y: box.y + p.y, w: p.w, h: p.h }
+            ctx.drawImage(frame, pic.x, pic.y, pic.w, pic.h)
+            const onMain = cam === plan.main && plan.overlayOnMain
+            if (onMain) overlayRegion = pic
+            if (req.overlay.labels) {
+              // The name scales with the picture, and sits bottom left on the main
+              // picture (the clock is top left there), top left on the others.
+              const font = Math.max(12, Math.min(40, Math.round(pic.h * 0.045)))
+              const y = onMain ? pic.y + pic.h - font * 1.6 - font * 0.4 : pic.y + font * 0.4
+              drawLabelAt(ctx as any, cam, pic.x + font * 0.4, y, font, req.lang)
+            }
           }
 
-          drawOverlay(ctx as any, size, {
+          // The clock, place and speed scale with the picture they sit on.
+          ctx.save()
+          ctx.translate(overlayRegion.x, overlayRegion.y)
+          drawOverlay(ctx as any, { w: overlayRegion.w, h: overlayRegion.h }, {
             telemetry: hud ? hud(t) : null,
             at: new Date(seg.startedAt.getTime() + t * 1000),
             place: req.event.meta?.city,
             noTelemetry,
           }, req.overlay, req.lang)
+          ctx.restore()
 
           const out = new VideoFrame(canvas, {
             timestamp: Math.round(written * frameDur),

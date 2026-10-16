@@ -19,7 +19,7 @@ import {
 } from '../lib/compose'
 import {
   FALLBACK_ASPECT, MAX_MAIN_CROP, arrange, autoShare, pictureRect, shareFromPointer, stepShare,
-  type FitMode,
+  type FitMode, type Placement,
 } from '../lib/arrange'
 import {
   CAMERA_LABEL, camerasIn, locate, segmentStart,
@@ -42,6 +42,8 @@ export interface PlayerProps {
   onTogglePlayerView?: () => void
   /** Fit shows the whole frame; fill crops the edges so no bars are left. */
   fitMode: FitMode
+  /** Told whether the tiles sit beside the main view or beneath it (undefined without tiles). */
+  onSplit?: (placement: Placement | undefined) => void
   /** The main view's share of the width or height, or null for automatic. */
   share: number | null
   onShare: (share: number | null) => void
@@ -56,7 +58,7 @@ export interface PlayerProps {
 }
 
 export default function Player({
-  event, cameras, layout, main, onMain, onTogglePlayerView, fitMode, share, onShare, overlay, lang,
+  event, cameras, layout, main, onMain, onTogglePlayerView, fitMode, share, onShare, onSplit, overlay, lang,
   onTime, onTelemetry, seekTo, playing, rate, onEnded,
 }: PlayerProps) {
   const present = useMemo(() => camerasIn(event).filter((c) => cameras.includes(c)), [event, cameras])
@@ -86,6 +88,8 @@ export default function Player({
   )
   const boxes = arrangement.rects
   const split = arrangement.split
+  const placementNow = split?.placement
+  useEffect(() => { onSplit?.(placementNow) }, [placementNow, onSplit])
   // Latest values for the animation loop and the key handler.
   // In fit mode the main view covers its box when that crops little, so a small
   // shape mismatch leaves no bars beside it; manual shares keep the whole frame.

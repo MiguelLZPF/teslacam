@@ -14,7 +14,7 @@ import Picker from './components/Picker'
 import Player from './components/Player'
 import Timeline, { clock } from './components/Timeline'
 import type { LayoutName, OverlayOptions, Unit } from './lib/compose'
-import type { FitMode } from './lib/arrange'
+import type { FitMode, Placement } from './lib/arrange'
 import {
   loadFit, loadMainCamera, loadShare, saveFit, saveMainCamera, saveShare,
 } from './lib/prefs'
@@ -46,6 +46,8 @@ export default function App() {
   const [main, setMainState] = useState<Camera>(loadMainCamera)
   const setMain = (c: Camera) => { setMainState(c); saveMainCamera(c) }
   // The main view's share of the player (null = automatic) and fit or fill, per view.
+  // Beside or beneath, as the player has arranged the tiles; the export mirrors it.
+  const [placement, setPlacement] = useState<Placement | undefined>(undefined)
   const [share, setShareState] = useState<number | null>(loadShare)
   const setShare = (s: number | null) => { setShareState(s); saveShare(s) }
   const [fits, setFits] = useState<{ normal: FitMode; player: FitMode }>(
@@ -253,6 +255,7 @@ export default function App() {
           fitMode={fitMode}
           share={share}
           onShare={setShare}
+          onSplit={setPlacement}
           overlay={opts}
           lang="en"
           onTime={onTime}
@@ -370,6 +373,7 @@ export default function App() {
           cameras={cameras}
           layout={layout}
           main={main}
+          placement={placement}
           overlay={opts}
           fromSec={inSec}
           toSec={outSec ?? duration}
