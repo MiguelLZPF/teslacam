@@ -13,12 +13,17 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { IconClose, IconDrive, IconFolder } from './icons'
+import { IconClose, IconDrive, IconFile, IconFolder } from './icons'
 import {
   canRememberFolder, ensureRead, forgetNasHandle, loadNasHandle, saveNasHandle,
 } from '../lib/nas'
 import type { TeslaEvent } from '../lib/library'
-import { scanLibrary, type ScanProgress } from '../lib/library'
+import { scanFiles, scanLibrary, type ScanProgress } from '../lib/library'
+
+/** Whether the browser's file input can pick a whole folder (iPadOS Safari cannot). */
+export function hasFolderInput(): boolean {
+  try { return 'webkitdirectory' in document.createElement('input') } catch { return false }
+}
 
 export function hasDirectoryPicker(): boolean {
   return typeof (window as any).showDirectoryPicker === 'function'
@@ -95,6 +100,25 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
     }
   }
 
+  // Plain multi-select of clips, for browsers with no folder access at all.
+  const scanPicked = async (list: FileList) => {
+    setError(null)
+    setBusy({ folder: 'files', events: 0 })
+    try {
+      const events = await scanFiles(Array.from(list))
+      if (!events.length) {
+        setError('None of those files is a TeslaCam clip. Clips are named like '
+          + '2026-10-05_09-49-11-front.mp4; select the .mp4 files of one event or one drive.')
+        return
+      }
+      onLoaded(events)
+    } catch {
+      setError('The files could not be read.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const pick = async () => {
     try {
       const handle = await (window as any).showDirectoryPicker({ mode: 'read' })
@@ -162,6 +186,15 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
         onChange={(e) => e.target.files?.length && scan(handleFromFileList(e.target.files))}
       />
 
+      <input
+        type="file"
+        className="sr-only"
+        id="fileinput"
+        multiple
+        accept="video/mp4,.mp4,application/json,.json"
+        onChange={(e) => e.target.files?.length && scanPicked(e.target.files)}
+      />
+
       {canRememberFolder() ? (
         <div className="mt-7">
           <button
@@ -196,18 +229,32 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
               Choose TeslaCam folder
             </button>
           ) : (
-            <label htmlFor="dirinput" className="btn btn-primary tap cursor-pointer">
-              Choose TeslaCam folder
-            </label>
+            <>
+              {hasFolderInput() && (
+                <label htmlFor="dirinput" className="btn btn-primary tap cursor-pointer"
+                       title="Choose a TeslaCam folder" aria-label="Choose a TeslaCam folder">
+                  <IconFolder /> Choose TeslaCam folder
+                </label>
+              )}
+              <label htmlFor="fileinput"
+                     className={'btn tap cursor-pointer' + (hasFolderInput() ? '' : ' btn-primary')}
+                     title="Open clip files (select the .mp4 files, and verdict.json if you want its score)"
+                     aria-label="Open files">
+                <IconFile /> Open files
+              </label>
+            </>
           )}
           <p className="w-full text-sm text-muted">
-            This browser cannot remember a folder between visits, so pick it each time.
-            Chrome or Edge can remember the NAS folder.
+            {hasDirectoryPicker()
+              ? 'This browser cannot remember a folder between visits, so pick it each time. Chrome or Edge can remember the NAS folder.'
+              : hasFolderInput()
+                ? 'This browser cannot remember a folder. Open files lets you select clips one by one.'
+                : 'This browser cannot open a folder. Select the clips (.mp4) of an event in the Files app; they are grouped by their time stamps. Add verdict.json to one event to see its score.'}
           </p>
         </div>
       )}
 
-      {!hasDirectoryPicker() && (
+      {!hasDirectoryPicker() && hasFolderInput() && (
         <p className="mt-3 text-sm text-warn">
           Your browser cannot read a folder directly. It still works, but it has to
           go through the whole folder first, which takes longer. Chrome and Edge

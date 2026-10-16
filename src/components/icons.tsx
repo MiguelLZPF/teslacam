@@ -37,6 +37,7 @@ export const IconDrive = () => (
   <Svg><path d="M3 14h18v6H3zM3 14l3-8h12l3 8" /><path d="M7 17h.01M11 17h.01" /></Svg>
 )
 export const IconFolder = () => <Svg><path d="M3 6h6l2 2h10v11H3z" /></Svg>
+export const IconFile = () => <Svg><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4" /></Svg>
 export const IconClose = () => <Svg><path d="M6 6l12 12M18 6L6 18" /></Svg>
 export const IconDownload = () => <Svg><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></Svg>
 export const IconArrowLeft = () => <Svg><path d="M19 12H5M11 6l-6 6 6 6" /></Svg>

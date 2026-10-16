@@ -233,6 +233,30 @@ async function walk(
 
 const SIDECARS = new Set(['event.json', 'verdict.json', 'thumb.png'])
 
+/**
+ * Group a plain list of files into events, for browsers that cannot walk a
+ * folder (iPadOS Safari: no directory picker, no webkitdirectory), where the
+ * operator multi-selects clips in the Files app. The same grouping as a folder
+ * found below the picked one: clips are matched by their Tesla filename
+ * timestamp and cut into drives where more than SPLIT_GAP_S of footage is
+ * missing. A file list carries no folder, so a verdict.json is attached only when
+ * exactly one was picked and exactly one event came out; otherwise it is ignored
+ * rather than guessed.
+ */
+export async function scanFiles(files: File[]): Promise<TeslaEvent[]> {
+  const clips = files.filter((f) => NAME.test(f.name))
+  if (!clips.length) return []
+  const events = await eventsFromFolderAsync(['Files'], clips, true)
+  const verdicts = files.filter((f) => f.name === 'verdict.json')
+  if (verdicts.length === 1 && events.length === 1) {
+    const text = await readSmallText(verdicts[0])
+    const v = text === undefined ? undefined : parseVerdict(text, events[0].segments)
+    if (v) events[0].verdict = v
+  }
+  events.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+  return events
+}
+
 function sourceFor(trail: string[]): Source {
   for (let i = trail.length - 1; i >= 0; i--) {
     const hit = SOURCE_DIRS.find((s) => s === trail[i])
