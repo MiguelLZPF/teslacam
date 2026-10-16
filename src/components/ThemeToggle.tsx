@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { IconContrast } from './icons'
 import { applyTheme, loadTheme, saveTheme, type Theme } from '../lib/prefs'
 
 /** Dark (true black) or the original grey theme, on every screen. */
@@ -18,9 +19,9 @@ export default function ThemeToggle() {
         className="chip"
         onClick={flip}
         aria-label="Switch theme"
-        title="Switch theme"
+        title={theme === 'black' ? 'Theme: dark. Switch to classic grey.' : 'Theme: classic. Switch to dark.'}
       >
-        Theme: {theme === 'black' ? 'Dark' : 'Classic'}
+        <IconContrast /> Theme: {theme === 'black' ? 'Dark' : 'Classic'}
       </button>
     </div>
   )

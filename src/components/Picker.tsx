@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { IconClose, IconDrive, IconFolder } from './icons'
 import {
   canRememberFolder, ensureRead, forgetNasHandle, loadNasHandle, saveNasHandle,
 } from '../lib/nas'
@@ -168,19 +169,23 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
             onClick={openNas}
             disabled={Boolean(busy) || nas === undefined}
           >
-            Open NAS footage
+            <IconDrive /> Open NAS footage
           </button>
           <p className="mt-2 text-sm text-muted">
             {nas
               ? <>Remembered folder: <span className="num">{nas.name}</span>. One click, then Allow when the browser asks.</>
               : 'The first time, choose the Tesla share (for example /Volumes/tesla). The browser remembers it for next time.'}
             {nas && (
-              <button className="ml-2 underline" onClick={forget}>Forget it</button>
+              <button className="ml-2 inline-flex items-center gap-1 underline" onClick={forget}
+                      title="Forget the remembered folder" aria-label="Forget the remembered folder">
+                <IconClose />Forget it
+              </button>
             )}
           </p>
           <div className="mt-4">
-            <button className="btn !px-3 !py-1.5 text-sm" onClick={pick} disabled={Boolean(busy)}>
-              Open another folder
+            <button className="btn !px-3 !py-1.5 text-sm" onClick={pick} disabled={Boolean(busy)}
+                    title="Open another folder by hand" aria-label="Open another folder">
+              <IconFolder /> Open another folder
             </button>
           </div>
         </div>

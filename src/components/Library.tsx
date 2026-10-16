@@ -13,14 +13,15 @@ import {
   REASON_LABEL, camerasIn, eventSeconds,
   type Source, type TeslaEvent, type Verdict,
 } from '../lib/library'
+import { IconAll, IconBolt, IconBookmark, IconClock, IconFolder, IconShield } from './icons'
 import Thumb from './Thumb'
 
-const SOURCES: { id: Source | 'all'; da: string }[] = [
-  { id: 'all', da: 'All' },
-  { id: 'RecentClips', da: 'Recent' },
-  { id: 'SavedClips', da: 'Saved' },
-  { id: 'SentryClips', da: 'Sentry' },
-  { id: 'Events', da: 'Events' },
+const SOURCES: { id: Source | 'all'; da: string; icon: () => React.JSX.Element }[] = [
+  { id: 'all', da: 'All', icon: IconAll },
+  { id: 'RecentClips', da: 'Recent', icon: IconClock },
+  { id: 'SavedClips', da: 'Saved', icon: IconBookmark },
+  { id: 'SentryClips', da: 'Sentry', icon: IconShield },
+  { id: 'Events', da: 'Events', icon: IconBolt },
 ]
 
 const PAGE = 60
@@ -60,14 +61,18 @@ export default function Library({ events, onOpen, onReset }: {
             {events.length} {events.length === 1 ? 'recording' : 'recordings'}
           </h1>
         </div>
-        <button className="btn" onClick={onReset}>Choose another folder</button>
+        <button className="btn" onClick={onReset} title="Choose another folder" aria-label="Choose another folder">
+          <IconFolder /> Choose another folder
+        </button>
       </header>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {SOURCES.map((s) => (
           <button key={s.id} className="chip" aria-pressed={source === s.id}
+                  title={`Show ${s.da === 'All' ? 'all recordings' : s.da.toLowerCase() + ' recordings'}`}
+                  aria-label={`Filter: ${s.da}`}
                   onClick={() => { setSource(s.id); setShown(PAGE) }}>
-            {s.da}
+            <s.icon />{s.da}
             <span className="num text-faint">{counts[s.id] ?? 0}</span>
           </button>
         ))}

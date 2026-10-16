@@ -14,27 +14,37 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  contain, drawCameraLabel, drawOverlay, layoutFor,
+  drawLabelAt, drawOverlay,
   type LayoutName, type OverlayOptions,
 } from '../lib/compose'
+import {
+  FALLBACK_ASPECT, MAX_MAIN_CROP, arrange, autoShare, pictureRect, shareFromPointer, stepShare,
+  type FitMode,
+} from '../lib/arrange'
 import {
   CAMERA_LABEL, camerasIn, locate, segmentStart,
   type Camera, type TeslaEvent,
 } from '../lib/library'
 import { buildIndex, extractTelemetry, type Telemetry } from '../lib/sei'
+import { IconGrip } from './icons'
 
 const DRIFT_TOLERANCE = 0.08     // seconds before a camera is pulled back
 
 export interface PlayerProps {
-  /** Fill the parent: the cameras take the largest box of the right shape that fits. */
-  fit?: boolean
   event: TeslaEvent
   cameras: Camera[]
   layout: LayoutName
-  /** The camera shown large in the car layout. */
+  /** The camera shown large. */
   main?: Camera
-  /** A click on a small tile in the car layout asks for it to become the main view. */
+  /** A double-click on a tile asks for it to become the main view. */
   onMain?: (cam: Camera) => void
+  /** A double-click on the main view toggles the player-only view. */
+  onTogglePlayerView?: () => void
+  /** Fit shows the whole frame; fill crops the edges so no bars are left. */
+  fitMode: FitMode
+  /** The main view's share of the width or height, or null for automatic. */
+  share: number | null
+  onShare: (share: number | null) => void
   overlay: OverlayOptions
   lang: 'da' | 'en'
   onTime: (t: number, total: number) => void
@@ -46,31 +56,75 @@ export interface PlayerProps {
 }
 
 export default function Player({
-  fit, event, cameras, layout, main, onMain, overlay, lang,
+  event, cameras, layout, main, onMain, onTogglePlayerView, fitMode, share, onShare, overlay, lang,
   onTime, onTelemetry, seekTo, playing, rate, onEnded,
 }: PlayerProps) {
   const present = useMemo(() => camerasIn(event).filter((c) => cameras.includes(c)), [event, cameras])
-  const boxes = useMemo(() => layoutFor(layout, present, main), [layout, present, main])
 
-  // Only the car layout has a large slot to swap into.
-  const swappable = Boolean(onMain) && layout === 'tesla' && present.length === 4
+  // The container fills whatever the page gives it; the cameras tile all of it.
   const wrap = useRef<HTMLDivElement>(null)
-  const [fitSize, setFitSize] = useState<{ w: number; h: number } | null>(null)
-  const ratio = layout === 'tesla' && present.length === 4 ? 4 / 3 : ratioOf(aspectFor(layout, present.length))
+  const [size, setSize] = useState({ w: 0, h: 0 })
+  // The real shape of the footage, read from the timekeeper video once it loads.
+  const [aspect, setAspect] = useState(FALLBACK_ASPECT)
   useEffect(() => {
-    if (!fit) return
     const el = wrap.current
     if (!el) return
     const measure = () => {
       const r = el.getBoundingClientRect()
-      const w = Math.max(0, Math.min(r.width, r.height * ratio))
-      setFitSize({ w, h: w / ratio })
+      setSize((o) => (Math.abs(o.w - r.width) < 0.5 && Math.abs(o.h - r.height) < 0.5
+        ? o : { w: r.width, h: r.height }))
     }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [fit, ratio])
+  }, [])
+
+  const arrangement = useMemo(
+    () => arrange(layout, present, main, size.w, size.h, share, aspect),
+    [layout, present, main, size.w, size.h, share, aspect],
+  )
+  const boxes = arrangement.rects
+  const split = arrangement.split
+  // Latest values for the animation loop and the key handler.
+  // In fit mode the main view covers its box when that crops little, so a small
+  // shape mismatch leaves no bars beside it; manual shares keep the whole frame.
+  const mainCover = fitMode === 'fill'
+    || Boolean(split?.auto && (arrangement.mainCrop ?? 1) <= MAX_MAIN_CROP)
+  const live = useRef({ arrangement, fitMode, aspect, size, share, mainCover })
+  live.current = { arrangement, fitMode, aspect, size, share, mainCover }
+
+  // [ and ] shrink and grow the main view.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '[' && e.key !== ']') return
+      const el = e.target as HTMLElement | null
+      if (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return
+      const cur = live.current
+      if (!cur.arrangement.split) return
+      e.preventDefault()
+      const now = cur.share ?? autoShare(present.length, cur.size.w, cur.size.h, cur.aspect)
+      onShare(stepShare(now, e.key === ']' ? 1 : -1))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [present.length, onShare])
+
+  // Dragging the divider: pointer capture keeps the drag alive outside it.
+  const dragging = useRef(false)
+  const onDividerMove = (e: React.PointerEvent) => {
+    if (!dragging.current || !split || !wrap.current) return
+    const r = wrap.current.getBoundingClientRect()
+    onShare(shareFromPointer(split.placement, e.clientX - r.left, e.clientY - r.top, r.width, r.height))
+  }
+  const onDividerKey = (e: React.KeyboardEvent) => {
+    if (!split) return
+    const grow = split.placement === 'side' ? 'ArrowRight' : 'ArrowDown'
+    const shrink = split.placement === 'side' ? 'ArrowLeft' : 'ArrowUp'
+    if (e.key !== grow && e.key !== shrink) return
+    e.preventDefault()
+    onShare(stepShare(split.share, e.key === grow ? 1 : -1))
+  }
 
   const refs = useRef(new Map<Camera, HTMLVideoElement>())
   const hud = useRef<HTMLCanvasElement>(null)
@@ -205,19 +259,47 @@ export default function Player({
       if (!ctx) return
       ctx.clearRect(0, 0, w, h)
 
-      if (overlay.labels) {
-        for (const [cam, box] of boxes) drawCameraLabel(ctx, cam, box, { w, h }, lang)
+      // Positions come from the same arrangement the videos use, and from the
+      // picture each video actually shows (whole frame, or the cropped box).
+      const { arrangement: arr, fitMode: mode, aspect: asp, mainCover: cover } = live.current
+      const pic = (cam: Camera) => {
+        const r = arr.rects.get(cam)
+        if (!r) return null
+        const box = { w: r.w * w, h: r.h * h }
+        const p = pictureRect(box, asp, cam === arr.main && cover ? 'fill' : mode)
+        return { x: r.x * w + p.x, y: r.y * h + p.y, w: p.w, h: p.h }
       }
-      drawOverlay(ctx, { w, h }, {
-        telemetry: sample,
-        at: new Date(segment ? segment.startedAt.getTime() + t * 1000 : Date.now()),
-        place: event.meta?.city,
-        noTelemetry: telemetry.current.empty,
-      }, overlay, lang)
+      if (overlay.labels) {
+        for (const cam of arr.rects.keys()) {
+          const p = pic(cam)
+          if (!p) continue
+          const font = Math.max(10 * dpr, Math.min(28 * dpr, p.h * 0.045))
+          // The main picture carries the clock at its top left, so its camera
+          // name sits at the bottom left instead of underneath it.
+          const onMain = cam === arr.main && (layout === 'tesla' || layout === 'single')
+          const y = onMain ? p.y + p.h - font * 1.6 - font * 0.4 : p.y + font * 0.4
+          drawLabelAt(ctx, cam, p.x + font * 0.4, y, font, lang)
+        }
+      }
+      // The clock, place and speed go on the main picture; with several equal
+      // cameras (grid, wide) they go on the whole area as before.
+      const region = (layout === 'tesla' || layout === 'single') && arr.main
+        ? pic(arr.main) : { x: 0, y: 0, w, h }
+      if (region) {
+        ctx.save()
+        ctx.translate(region.x, region.y)
+        drawOverlay(ctx, { w: region.w, h: region.h }, {
+          telemetry: sample,
+          at: new Date(segment ? segment.startedAt.getTime() + t * 1000 : Date.now()),
+          place: event.meta?.city,
+          noTelemetry: telemetry.current.empty,
+        }, overlay, lang, 0.6 * dpr)
+        ctx.restore()
+      }
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [lead, boxes, overlay, lang, event, index, segment, onTime, onTelemetry, syncOthers])
+  }, [lead, layout, overlay, lang, event, index, segment, onTime, onTelemetry, syncOthers])
 
   const advance = () => {
     if (index + 1 < event.segments.length) {
@@ -229,57 +311,96 @@ export default function Player({
     }
   }
 
-  const body = (
-    <div className="relative w-full overflow-hidden rounded-xl bg-black"
-         style={fit && fitSize
-           ? { width: fitSize.w, height: fitSize.h }
-           : { aspectRatio: layout === 'tesla' && present.length === 4 ? '4 / 3' : undefined }}>
-      <div className="relative h-full w-full" style={{ aspectRatio: aspectFor(layout, present.length) }}>
-        {present.map((cam) => {
-          const box = boxes.get(cam)
-          if (!box) return null
-          return (
-            <video
-              key={cam}
-              ref={(el) => { if (el) refs.current.set(cam, el); else refs.current.delete(cam) }}
-              src={urls.get(cam)}
-              muted
-              playsInline
-              preload="auto"
-              // The timekeeper reports the end of a segment; the others just
-              // follow, so only one advance fires.
-              onEnded={cam === lead ? advance : undefined}
-              onLoadedMetadata={(e) => {
-                if (cam !== lead) return
-                const d = e.currentTarget.duration
-                if (Number.isFinite(d)) segment && (segment.durationSec = d)
-                // Apply a seek that was waiting for this segment to load. Set the
-                // lead here and every camera that's ready; the rest are pulled
-                // into line by syncOthers on the next frame.
-                if (pendingSeek.current !== null) {
-                  const off = pendingSeek.current
-                  pendingSeek.current = null
-                  e.currentTarget.currentTime = off
-                  for (const el of refs.current.values()) {
-                    if (el.readyState >= 1) el.currentTime = off
-                  }
+  const divider = split && size.w > 0 ? (() => {
+    const mainRect = boxes.get(arrangement.main!)!
+    return split.placement === 'side'
+      ? { left: `calc(${mainRect.w * 100}% - 4px)`, top: 0, width: 8, height: '100%', cursor: 'col-resize' }
+      : { left: 0, top: `calc(${mainRect.h * 100}% - 4px)`, width: '100%', height: 8, cursor: 'row-resize' }
+  })() : null
+
+  return (
+    <div ref={wrap} className="relative h-full w-full overflow-hidden rounded-xl bg-black">
+      {present.map((cam) => {
+        const box = boxes.get(cam)
+        if (!box) return null
+        const isMain = cam === arrangement.main
+        return (
+          <video
+            key={cam}
+            ref={(el) => { if (el) refs.current.set(cam, el); else refs.current.delete(cam) }}
+            src={urls.get(cam)}
+            muted
+            playsInline
+            preload="auto"
+            // The timekeeper reports the end of a segment; the others just
+            // follow, so only one advance fires.
+            onEnded={cam === lead ? advance : undefined}
+            onLoadedMetadata={(e) => {
+              if (cam !== lead) return
+              const vw = e.currentTarget.videoWidth
+              const vh = e.currentTarget.videoHeight
+              if (vw > 0 && vh > 0) setAspect(vw / vh)
+              const d = e.currentTarget.duration
+              if (Number.isFinite(d)) segment && (segment.durationSec = d)
+              // Apply a seek that was waiting for this segment to load. Set the
+              // lead here and every camera that's ready; the rest are pulled
+              // into line by syncOthers on the next frame.
+              if (pendingSeek.current !== null) {
+                const off = pendingSeek.current
+                pendingSeek.current = null
+                e.currentTarget.currentTime = off
+                for (const el of refs.current.values()) {
+                  if (el.readyState >= 1) el.currentTime = off
                 }
-                if (playing) void e.currentTarget.play().catch(() => {})
-              }}
-              className={'absolute object-contain' + (swappable && box.y > 0 ? ' cursor-pointer' : '')}
-              title={swappable && box.y > 0 ? 'Make this the main view' : undefined}
-              onClick={swappable && box.y > 0 ? () => onMain?.(cam) : undefined}
-              style={{
-                left: `${box.x * 100}%`,
-                top: `${box.y * 100}%`,
-                width: `${box.w * 100}%`,
-                height: `${box.h * 100}%`,
-              }}
-            />
-          )
-        })}
-        <canvas ref={hud} className="pointer-events-none absolute inset-0 h-full w-full" />
-      </div>
+              }
+              if (playing) void e.currentTarget.play().catch(() => {})
+            }}
+            onDoubleClick={() => (isMain ? onTogglePlayerView?.() : onMain?.(cam))}
+            className={'absolute bg-black ' + (fitMode === 'fill' || (isMain && mainCover) ? 'object-cover' : 'object-contain')}
+            title={isMain ? 'Double-click: player view' : 'Double-click: make this the main view'}
+            style={{
+              left: `${box.x * 100}%`,
+              top: `${box.y * 100}%`,
+              width: `${box.w * 100}%`,
+              height: `${box.h * 100}%`,
+            }}
+          />
+        )
+      })}
+      <canvas ref={hud} className="pointer-events-none absolute inset-0 h-full w-full" />
+
+      {divider && split && (
+        <div
+          role="separator"
+          aria-orientation={split.placement === 'side' ? 'vertical' : 'horizontal'}
+          aria-label="Resize the main view"
+          aria-valuemin={50}
+          aria-valuemax={90}
+          aria-valuenow={Math.round(split.share * 100)}
+          tabIndex={0}
+          title="Drag to resize. Double-click to reset. Keys [ and ] also resize."
+          className="group absolute z-10 flex items-center justify-center touch-none"
+          style={divider}
+          onPointerDown={(e) => {
+            e.preventDefault()
+            dragging.current = true
+            e.currentTarget.setPointerCapture(e.pointerId)
+            onDividerMove(e)
+          }}
+          onPointerMove={onDividerMove}
+          onPointerUp={(e) => { dragging.current = false; e.currentTarget.releasePointerCapture(e.pointerId) }}
+          onPointerCancel={() => { dragging.current = false }}
+          onDoubleClick={() => onShare(null)}
+          onKeyDown={onDividerKey}
+        >
+          <span className="rounded-full bg-live/0 p-0.5 text-live opacity-0 transition-opacity group-hover:bg-black/70 group-hover:opacity-100 group-focus-visible:opacity-100">
+            <IconGrip />
+          </span>
+          <span
+            className={'pointer-events-none absolute bg-live/40 group-hover:bg-live ' + (split.placement === 'side' ? 'inset-y-0 left-1/2 w-px' : 'inset-x-0 top-1/2 h-px')}
+          />
+        </div>
+      )}
 
       {!present.length && (
         <p className="absolute inset-0 grid place-content-center text-faint">
@@ -288,25 +409,6 @@ export default function Player({
       )}
     </div>
   )
-  return fit ? (
-    <div ref={wrap} className="grid h-full w-full place-items-center">{body}</div>
-  ) : body
-}
-
-function ratioOf(a: string): number {
-  const [w, h] = a.split('/').map((x) => Number(x.trim()))
-  return w / h
-}
-
-/** The shape of the composed view, so the container does not letterbox twice. */
-function aspectFor(layout: LayoutName, n: number): string {
-  if (n === 0) return '4 / 3'
-  if (layout === 'tesla' && n === 4) return '2 / 1'
-  if (layout === 'single' || n === 1) return '4 / 3'
-  if (layout === 'wide') return `${(4 * n)} / 3`
-  const cols = n <= 2 ? n : 2
-  const rows = Math.ceil(n / cols)
-  return `${4 * cols} / ${3 * rows}`
 }
 
 export { CAMERA_LABEL }

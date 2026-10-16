@@ -125,9 +125,13 @@ export function drawOverlay(
   frame: OverlayFrame,
   opts: OverlayOptions,
   lang: 'da' | 'en' = 'en',
+  /** Smallest text scale, so the overlay stays readable in a small picture. */
+  minScale = 0,
 ) {
   const pad = Math.round(size.h * 0.025)
-  const unitScale = size.h / 960
+  // Scale with the smaller of the two sides, so a wide or a tall picture does not
+  // push the speed readout past its edge; 960 high is the original size.
+  const unitScale = Math.max(minScale, Math.min(size.h / 960, size.w / 1280))
 
   if (opts.clock) {
     const stamp = frame.at.toLocaleString('en-GB', {
@@ -222,6 +226,15 @@ export function drawCameraLabel(
   const inset = Math.round(size.h * 0.012)
   label(ctx, CAMERA_LABEL[cam][lang].toUpperCase(),
         box.x + inset, box.y + inset, Math.round(size.h * 0.022), 'left')
+}
+
+/** The camera name at a given corner position, for pictures that are not the
+ *  4:3 the exporter assumes. */
+export function drawLabelAt(
+  ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: number,
+  fontPx: number, lang: 'da' | 'en',
+) {
+  label(ctx, CAMERA_LABEL[cam][lang].toUpperCase(), x, y, fontPx, 'left')
 }
 
 function label(

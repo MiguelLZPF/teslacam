@@ -14,7 +14,14 @@ import Picker from './components/Picker'
 import Player from './components/Player'
 import Timeline, { clock } from './components/Timeline'
 import type { LayoutName, OverlayOptions, Unit } from './lib/compose'
-import { loadMainCamera, saveMainCamera } from './lib/prefs'
+import type { FitMode } from './lib/arrange'
+import {
+  loadFit, loadMainCamera, loadShare, saveFit, saveMainCamera, saveShare,
+} from './lib/prefs'
+import {
+  IconArrowLeft, IconCamera, IconFill, IconFit, IconFullscreen, IconFullscreenExit, IconMain,
+  IconPause, IconPlay, IconPlayerView, IconSpeed, IconStepBack, IconStepForward,
+} from './components/icons'
 import {
   BASE_CAMERAS, CAMERA_LABEL, CAMERAS, JUMP_LEAD_S, camerasIn, collectActions, eventPeaks, eventSeconds,
   measureDurations,
@@ -24,7 +31,7 @@ import {
 import { speedIn, type Telemetry } from './lib/sei'
 
 const LAYOUTS: { id: LayoutName; da: string }[] = [
-  { id: 'tesla', da: 'Car layout' },
+  { id: 'tesla', da: 'Main + tiles' },
   { id: 'grid', da: 'Grid' },
   { id: 'wide', da: 'In a row' },
   { id: 'single', da: 'One camera' },
@@ -38,6 +45,12 @@ export default function App() {
   const [cameras, setCameras] = useState<Camera[]>([...BASE_CAMERAS])
   const [main, setMainState] = useState<Camera>(loadMainCamera)
   const setMain = (c: Camera) => { setMainState(c); saveMainCamera(c) }
+  // The main view's share of the player (null = automatic) and fit or fill, per view.
+  const [share, setShareState] = useState<number | null>(loadShare)
+  const setShare = (s: number | null) => { setShareState(s); saveShare(s) }
+  const [fits, setFits] = useState<{ normal: FitMode; player: FitMode }>(
+    () => ({ normal: loadFit('normal'), player: loadFit('player') }),
+  )
   const [layout, setLayout] = useState<LayoutName>('tesla')
   const [unit, setUnit] = useState<Unit>('kmh')
   const [overlay, setOverlay] = useState<Omit<OverlayOptions, 'unit'>>({
@@ -65,6 +78,15 @@ export default function App() {
       fsEntered.current = true
       void document.documentElement.requestFullscreen().catch(() => { fsEntered.current = false })
     }
+  }
+
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const fitMode = fits[playerView ? 'player' : 'normal']
+  const toggleFit = () => {
+    const view = playerView ? 'player' : 'normal'
+    const next: FitMode = fits[view] === 'fit' ? 'fill' : 'fit'
+    setFits({ ...fits, [view]: next })
+    saveFit(view, next)
   }
 
   const [playing, setPlaying] = useState(true)
@@ -115,6 +137,14 @@ export default function App() {
     setActions([])
   }
 
+  // Step the playhead, clamped to the event.
+  const step = (d: number) => {
+    const t = Math.max(0, Math.min(Math.max(eventSeconds(selected!), total), time + d))
+    setPlaying(false)
+    setSeekTo(t)
+    setTime(t)
+  }
+
   // Real lengths for the timeline. The last segment of an event is usually a
   // few seconds rather than a minute, so a timeline drawn from the assumed
   // minute puts the out-point past the end of the footage.
@@ -160,6 +190,7 @@ export default function App() {
   // this, and the player view that fullscreen opened closes with it.
   useEffect(() => {
     const onChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement))
       if (!document.fullscreenElement && fsEntered.current) {
         fsEntered.current = false
         setPlayerView(false)
@@ -184,11 +215,12 @@ export default function App() {
 
   return (
     <div className={playerView
-      ? 'flex h-dvh w-full flex-col gap-2 px-2 py-2'
-      : 'mx-auto w-full max-w-[1800px] px-3 pb-16 pt-3 sm:px-5'}>
+      ? 'flex h-dvh w-full flex-col gap-2 p-1'
+      : 'w-full px-2 pb-6 pt-2'}>
       <header className={'mb-3 flex flex-wrap items-center gap-3' + (playerView ? ' hidden' : '')}>
-        <button className="btn" onClick={() => { setSelected(null); setPlaying(false) }}>
-          ← All recordings
+        <button className="btn" onClick={() => { setSelected(null); setPlaying(false) }}
+                title="Back to all recordings" aria-label="Back to all recordings">
+          <IconArrowLeft /> All recordings
         </button>
         <div className="min-w-0">
           <p className="truncate font-medium">{titleOf(selected)}</p>
@@ -210,14 +242,17 @@ export default function App() {
           <p className="mt-1 text-sm text-faint">Playback is paused meanwhile.</p>
         </div>
       ) : (
-        <div className={playerView ? 'min-h-0 flex-1' : 'h-[72dvh]'}>
+        <div className={playerView ? 'min-h-0 flex-1' : 'h-[72dvh] min-h-[320px]'}>
         <Player
-          fit
           event={selected}
           cameras={cameras}
           layout={layout}
           main={main}
           onMain={setMain}
+          onTogglePlayerView={() => setView(!playerView)}
+          fitMode={fitMode}
+          share={share}
+          onShare={setShare}
           overlay={opts}
           lang="en"
           onTime={onTime}
@@ -233,20 +268,41 @@ export default function App() {
       {/* Transport and the cut */}
       <div className={'card px-4 py-3' + (playerView ? '' : ' mt-3')}>
         <div className="mb-3 flex items-center gap-3">
-          <button className="btn shrink-0" onClick={() => setPlaying(!playing)}
+          <button className="btn shrink-0 !px-2.5" onClick={() => step(-5)}
+                  title="Back 5 seconds" aria-label="Back 5 seconds">
+            <IconStepBack />
+          </button>
+          <button className="btn shrink-0 !px-3" onClick={() => setPlaying(!playing)}
+                  title={playing ? 'Pause (space)' : 'Play (space)'}
                   aria-label={playing ? 'Pause' : 'Play'}>
-            {playing ? '❚❚' : '▶'}
+            {playing ? <IconPause /> : <IconPlay />}
+          </button>
+          <button className="btn shrink-0 !px-2.5" onClick={() => step(5)}
+                  title="Forward 5 seconds" aria-label="Forward 5 seconds">
+            <IconStepForward />
           </button>
           <span className="num shrink-0 text-sm text-muted">
             {clock(time)} / {clock(duration)}
           </span>
           <span className="ml-auto flex items-center gap-2">
-            <button className="chip" aria-pressed={playerView}
-                    onClick={() => setView(!playerView)}>
-              {playerView ? 'Exit player view' : 'Player view'}
+            <button className="chip" onClick={toggleFit}
+                    title={fitMode === 'fit'
+                      ? 'Fit: whole frame visible. Click for fill (crop the edges, no bars).'
+                      : 'Fill: edges cropped, no bars. Click for fit (whole frame visible).'}
+                    aria-label={fitMode === 'fit' ? 'Switch to fill' : 'Switch to fit'}>
+              {fitMode === 'fit' ? <IconFit /> : <IconFill />}
+              {fitMode === 'fit' ? 'Fit' : 'Fill'}
             </button>
-            <button className="chip" onClick={toggleFullscreen} title="Key F">
-              Fullscreen (F)
+            <button className="chip" aria-pressed={playerView}
+                    onClick={() => setView(!playerView)}
+                    title={playerView ? 'Exit player view (Esc)' : 'Player view: cameras and controls only'}
+                    aria-label={playerView ? 'Exit player view' : 'Player view'}>
+              <IconPlayerView />
+              {playerView ? 'Exit' : 'Player view'}
+            </button>
+            <button className="chip" onClick={toggleFullscreen}
+                    title="Fullscreen (F). Esc leaves." aria-label="Fullscreen">
+              {isFullscreen ? <IconFullscreenExit /> : <IconFullscreen />}
             </button>
           </span>
         </div>
@@ -268,7 +324,7 @@ export default function App() {
 
         <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
           <div className="flex items-center gap-1.5">
-            <span className="eyebrow">Speed</span>
+            <span className="eyebrow inline-flex items-center gap-1" title="Playback speed"><IconSpeed />Speed</span>
             {RATES.map((r) => (
               <button key={r} className="chip" aria-pressed={rate === r}
                       onClick={() => setRate(r)}>{r}×</button>
@@ -279,9 +335,11 @@ export default function App() {
             <span className="eyebrow">Cameras</span>
             {available.map((cam) => (
               <button key={cam} className="chip" aria-pressed={cameras.includes(cam)}
+                      title={`${cameras.includes(cam) ? 'Hide' : 'Show'} the ${CAMERA_LABEL[cam].en} camera`}
+                      aria-label={`${CAMERA_LABEL[cam].en} camera`}
                       onClick={() => setCameras((c) =>
                         c.includes(cam) ? c.filter((x) => x !== cam) : [...c, cam])}>
-                {CAMERA_LABEL[cam].en}
+                <IconCamera />{CAMERA_LABEL[cam].en}
               </button>
             ))}
           </div>
@@ -295,7 +353,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="eyebrow">Main view</span>
+            <span className="eyebrow inline-flex items-center gap-1" title="The camera shown large"><IconMain />Main view</span>
             <select className="chip !px-2" aria-label="Main camera"
                     value={available.includes(main) ? main : (available[0] ?? main)}
                     onChange={(e) => setMain(e.target.value as Camera)}>

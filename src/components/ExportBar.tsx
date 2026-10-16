@@ -7,6 +7,7 @@
  * the thing they act on.
  */
 
+import { IconClose, IconDownload } from './icons'
 import { useEffect, useRef, useState } from 'react'
 import type { LayoutName, OverlayOptions } from '../lib/compose'
 import { canExport, exportName, exportVideo, type ExportProgress } from '../lib/export'
@@ -57,11 +58,14 @@ export default function ExportBar({
     <div className="mt-3 border-t border-line pt-3">
       <div className="flex flex-wrap items-center gap-3">
         {progress ? (
-          <button className="btn" onClick={() => abort.current?.abort()}>Cancel</button>
+          <button className="btn" onClick={() => abort.current?.abort()}
+                  title="Cancel the export" aria-label="Cancel the export">
+            <IconClose /> Cancel
+          </button>
         ) : (
           <button className="btn btn-primary" onClick={run}
                   disabled={!canExport() || !cameras.length || secs < 0.5}>
-            Export selection
+            <IconDownload /> Export selection
           </button>
         )}
         <p className="num text-sm text-faint">
@@ -72,7 +76,7 @@ export default function ExportBar({
 
         {done && (
           <a className="btn btn-primary ml-auto" href={done.url} download={done.name}>
-            Download {(done.bytes / 1e6).toFixed(1)} MB
+            <IconDownload /> Download {(done.bytes / 1e6).toFixed(1)} MB
           </a>
         )}
       </div>
