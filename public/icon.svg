@@ -1,7 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#0b0d0e"/>
-  <rect x="6" y="6" width="20" height="9" rx="2" fill="#5ad1c4"/>
-  <rect x="4" y="18" width="7" height="8" rx="1.6" fill="#2b3235"/>
-  <rect x="12.5" y="18" width="7" height="8" rx="1.6" fill="#2b3235"/>
-  <rect x="21" y="18" width="7" height="8" rx="1.6" fill="#2b3235"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#000000"/>
+  <!-- lens: accent ring, dark glass, play glyph -->
+  <circle cx="256" cy="226" r="158" fill="#0a0a0a" stroke="#5ad1c4" stroke-width="38"/>
+  <circle cx="256" cy="226" r="92" fill="#161616" stroke="#2f7f77" stroke-width="12"/>
+  <path d="M232 178 L232 274 L318 226 Z" fill="#f5f5f5"/>
+  <!-- timeline: track, progress, playhead -->
+  <line x1="92" y1="452" x2="420" y2="452" stroke="#3d3d3d" stroke-width="24" stroke-linecap="round"/>
+  <line x1="92" y1="452" x2="288" y2="452" stroke="#5ad1c4" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="288" cy="452" r="22" fill="#f5f5f5"/>
 </svg>
