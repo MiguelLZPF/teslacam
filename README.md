@@ -1,5 +1,44 @@
 # TeslaCam
 
+## About this fork
+
+This is a fork of [conscientsystems/teslacam](https://github.com/conscientsystems/teslacam), a
+browser viewer for Tesla dashcam footage. The original is by conscientsystems and is released
+under the MIT licence; the licence file is unchanged. Everything still runs in your browser and
+nothing is uploaded.
+
+What this fork adds:
+
+1. **English interface.** The Danish strings are translated, speeds show in km/h and dates use
+   the en-GB format. A test fails if Danish text comes back.
+2. **Open a parent folder.** Pick a folder such as `Events`, `RecentClips` or the whole share and
+   every event up to three levels below it is listed, newest first. A `verdict.json` next to the
+   clips, when present, shows its class and score.
+3. **Main camera, pillar cameras, theme.** Any camera can be the large main view, the pillar
+   cameras can be switched on, and the default theme is true black with a toggle.
+4. **Remembered folder, player view, timeline markers.** Chromium browsers keep the picked folder
+   for one-click reopening. Player view and fullscreen show only the cameras and controls. The
+   timeline marks trigger peaks, other kept windows and hard braking, and a click seeks to just
+   before a marker. The app has an icon and a web manifest.
+5. **Layout, icons, fit or fill.** The cameras fill the player area using the real frame shape,
+   with a draggable divider, fit or fill, keyboard resizing and icons on the controls.
+6. **Native-geometry export.** The exported MP4 is sized from the real clip dimensions, never
+   stretched, with no black bars.
+7. **Open files.** Browsers with no folder access, such as iPadOS Safari, can open the clips
+   selected in the Files app.
+
+To build it:
+
+```sh
+npm ci && npm run build      # static files in dist/
+npm test                     # optional
+```
+
+Serve `dist/` with any static file server. Footage is read by the browser, so nothing needs to
+be sent to the server.
+
+---
+
 A viewer for Tesla dashcam footage at **teslacam.cscloud.dk**. Point it at your
 TeslaCam folder, watch all four cameras in step, and export what you are looking
 at as an MP4.
