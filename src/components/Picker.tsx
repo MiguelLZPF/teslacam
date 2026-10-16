@@ -66,14 +66,14 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
     try {
       const events = await scanLibrary(handle, setBusy)
       if (!events.length) {
-        setError('Der er ingen TeslaCam-optagelser i den mappe. Vælg mappen der '
-          + 'hedder TeslaCam, eller en af RecentClips, SavedClips og SentryClips.')
+        setError('There are no TeslaCam recordings in that folder. Choose the folder '
+          + 'named TeslaCam, or one of RecentClips, SavedClips and SentryClips.')
         return
       }
       onLoaded(events)
     } catch (e) {
       setError(e instanceof Error && e.name === 'AbortError'
-        ? '' : 'Mappen kunne ikke læses.')
+        ? '' : 'The folder could not be read.')
     } finally {
       setBusy(null)
     }
@@ -85,22 +85,22 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
       await scan(handle)
     } catch (e) {
       // Cancelling the OS dialog throws. That is not an error worth showing.
-      if ((e as Error)?.name !== 'AbortError') setError('Mappen kunne ikke åbnes.')
+      if ((e as Error)?.name !== 'AbortError') setError('The folder could not be opened.')
       setBusy(null)
     }
   }
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-12">
-      <span className="eyebrow">teslacam.cscloud.dk</span>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Dine dashcam-optagelser</h1>
+      <span className="eyebrow">TeslaCam</span>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Your dashcam recordings</h1>
       <p className="mt-3 text-muted">
-        Peg på din TeslaCam-mappe — på USB-stikken, et SD-kort eller en mappe på
-        maskinen. Videoerne bliver liggende hvor de er.
+        Point at your TeslaCam folder: on the USB stick, an SD card or a folder on
+        the computer. The videos stay where they are.
       </p>
       <p className="mt-2 text-sm text-faint">
-        Alt sker i din browser. Der bliver ikke sendt en eneste video nogen steder hen;
-        serveren leverer kun siden.
+        Everything happens in your browser. Not a single video is sent anywhere;
+        the server only delivers the page.
       </p>
 
       {/* The fallback input is always in the DOM, hidden. Chromium gets the
@@ -121,41 +121,41 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
       <div className="mt-7 flex flex-wrap gap-3">
         {hasDirectoryPicker() ? (
           <button className="btn btn-primary" onClick={pick} disabled={Boolean(busy)}>
-            Vælg TeslaCam-mappe
+            Choose TeslaCam folder
           </button>
         ) : (
           <label htmlFor="dirinput" className="btn btn-primary tap cursor-pointer">
-            Vælg TeslaCam-mappe
+            Choose TeslaCam folder
           </label>
         )}
       </div>
 
       {!hasDirectoryPicker() && (
         <p className="mt-3 text-sm text-warn">
-          Din browser kan ikke læse en mappe direkte. Det virker stadig, men den
-          skal igennem hele mappen først, og det tager længere tid. Chrome og Edge
-          er hurtigere her.
+          Your browser cannot read a folder directly. It still works, but it has to
+          go through the whole folder first, which takes longer. Chrome and Edge
+          are faster here.
         </p>
       )}
 
       {busy && (
         <p role="status" className="mt-5 text-sm text-muted">
-          Læser {busy.folder}… <span className="num">{busy.events}</span> optagelser fundet
+          Reading {busy.folder}… <span className="num">{busy.events}</span> recordings found
         </p>
       )}
       {error && <p role="alert" className="mt-5 text-sm text-warn">{error}</p>}
 
       <div className="card mt-10 px-5 py-4">
-        <h2 className="eyebrow">Hvad appen kan</h2>
+        <h2 className="eyebrow">What the app can do</h2>
         <ul className="mt-2 space-y-1.5 text-sm text-muted">
-          <li>Se alle fire kameraer samtidig, i bilens eget layout</li>
-          <li>Slå kameraer til og fra, og skifte mellem layouts</li>
-          <li>Vise fart, gear, blinklys og bremse fra bilens egen telemetri</li>
-          <li>Eksportere det du ser som en MP4-fil</li>
+          <li>See all four cameras at once, in the car's own layout</li>
+          <li>Switch cameras on and off, and change between layouts</li>
+          <li>Show speed, gear, indicators and brake from the car's own telemetry</li>
+          <li>Export what you see as an MP4 file</li>
         </ul>
         <p className="mt-3 text-xs text-faint">
-          Telemetrien ligger inde i videoen og skrives kun af firmware 2025.44.25
-          og nyere. Ældre optagelser har den ikke, og så siger appen det.
+          The telemetry lives inside the video and is only written by firmware 2025.44.25
+          and newer. Older recordings do not have it, and the app says so.
         </p>
       </div>
     </main>

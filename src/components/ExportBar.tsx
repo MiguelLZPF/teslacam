@@ -37,13 +37,13 @@ export default function ExportBar({
     setError(null)
     if (done) { URL.revokeObjectURL(done.url); setDone(null) }
     abort.current = new AbortController()
-    const req = { event, cameras, layout, overlay, fromSec, toSec, lang: 'da' as const }
+    const req = { event, cameras, layout, overlay, fromSec, toSec, lang: 'en' as const }
     onBusy(true)
     try {
       const blob = await exportVideo(req, setProgress, abort.current.signal)
       setDone({ url: URL.createObjectURL(blob), name: exportName(req), bytes: blob.size })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Eksporten mislykkedes')
+      setError(e instanceof Error ? e.message : 'Export failed')
     } finally {
       setProgress(null)
       onBusy(false)
@@ -56,22 +56,22 @@ export default function ExportBar({
     <div className="mt-3 border-t border-line pt-3">
       <div className="flex flex-wrap items-center gap-3">
         {progress ? (
-          <button className="btn" onClick={() => abort.current?.abort()}>Afbryd</button>
+          <button className="btn" onClick={() => abort.current?.abort()}>Cancel</button>
         ) : (
           <button className="btn btn-primary" onClick={run}
                   disabled={!canExport() || !cameras.length || secs < 0.5}>
-            Eksportér markeringen
+            Export selection
           </button>
         )}
         <p className="num text-sm text-faint">
-          {Math.round(secs)} sekunder · {cameras.length} kamera{cameras.length === 1 ? '' : 'er'}
-          {overlay.speed ? ' · med fart' : ''}
-          {overlay.clock ? ' · med dato og tid' : ''}
+          {Math.round(secs)} seconds · {cameras.length} camera{cameras.length === 1 ? '' : 's'}
+          {overlay.speed ? ' · with speed' : ''}
+          {overlay.clock ? ' · with date and time' : ''}
         </p>
 
         {done && (
           <a className="btn btn-primary ml-auto" href={done.url} download={done.name}>
-            Hent {(done.bytes / 1e6).toFixed(1)} MB
+            Download {(done.bytes / 1e6).toFixed(1)} MB
           </a>
         )}
       </div>
@@ -86,7 +86,7 @@ export default function ExportBar({
                  style={{ width: `${Math.round(progress.fraction * 100)}%` }} />
           </div>
           <p className="mt-1 text-xs text-faint">
-            Det hele sker på din maskine, så det tager tid. Lad fanen være åben.
+            It all happens on your machine, so it takes time. Keep the tab open.
           </p>
         </div>
       )}
@@ -95,8 +95,8 @@ export default function ExportBar({
 
       {!canExport() && (
         <p className="mt-2 text-sm text-warn">
-          Din browser understøtter ikke WebCodecs, som eksporten bruger. Chrome,
-          Edge og nyere Safari kan. Alt andet i appen virker.
+          Your browser does not support WebCodecs, which export uses. Chrome,
+          Edge and recent Safari do. Everything else in the app works.
         </p>
       )}
     </div>
@@ -104,12 +104,12 @@ export default function ExportBar({
 }
 
 function phaseText(p: ExportProgress): string {
-  const where = p.segments > 1 ? `del ${p.segment} af ${p.segments}` : 'markeringen'
+  const where = p.segments > 1 ? `part ${p.segment} of ${p.segments}` : 'the selection'
   switch (p.phase) {
-    case 'decoding': return `Læser ${where}`
-    case 'encoding': return `Tegner og koder ${where}`
-    case 'writing': return 'Skriver filen'
-    case 'done': return 'Færdig'
-    default: return 'Klargør'
+    case 'decoding': return `Reading ${where}`
+    case 'encoding': return `Drawing and encoding ${where}`
+    case 'writing': return 'Writing the file'
+    case 'done': return 'Done'
+    default: return 'Preparing'
   }
 }

@@ -147,7 +147,7 @@ async function demux(file: File): Promise<Demuxed> {
   mp4.onSamples = (_id: number, _user: unknown, s: Sample[]) => { samples.push(...s) }
   mp4.onReady = (info: Movie) => {
     const t = info.videoTracks[0]
-    if (!t) { failure = 'ingen videostrøm'; return }
+    if (!t) { failure = 'no video stream'; return }
     track = t
 
     // avcC, which VideoDecoder needs as its `description`. Without it every
@@ -171,8 +171,8 @@ async function demux(file: File): Promise<Demuxed> {
   mp4.flush()
 
   if (failure) throw new Error(failure)
-  if (!track || !description) throw new Error('klippet kunne ikke læses')
-  if (!samples.length) throw new Error('ingen billeder i klippet')
+  if (!track || !description) throw new Error('the clip could not be read')
+  if (!samples.length) throw new Error('no frames in the clip')
 
   const chunks = samples
     .filter((s) => s.data)
@@ -322,10 +322,10 @@ export async function exportVideo(
   onProgress: (p: ExportProgress) => void,
   signal?: AbortSignal,
 ): Promise<Blob> {
-  if (!canExport()) throw new Error('WebCodecs er ikke tilgængelig i denne browser')
+  if (!canExport()) throw new Error('WebCodecs is not available in this browser')
 
   const cams = CAMERAS.filter((c) => req.cameras.includes(c))
-  if (!cams.length) throw new Error('Vælg mindst ét kamera')
+  if (!cams.length) throw new Error('Choose at least one camera')
 
   const layout = layoutFor(req.layout, cams)
   const size = canvasSize(layout)
@@ -355,7 +355,7 @@ export async function exportVideo(
   })
 
   const parts = planTrim(req.event, req.fromSec, req.toSec)
-  if (!parts.length) throw new Error('Markeringen er tom')
+  if (!parts.length) throw new Error('The selection is empty')
   const wanted = parts.reduce((n, p) => n + (p.toOffset - p.fromOffset), 0)
   let written = 0
   let done = 0                      // seconds of the selection already written
@@ -491,6 +491,6 @@ export function exportName(req: ExportRequest): string {
     String(at.getSeconds()).padStart(2, '0'),
   ].join('-')
   const secs = Math.max(1, Math.round(Math.abs(req.toSec - req.fromSec)))
-  const cams = req.cameras.length === 4 ? 'alle' : req.cameras.length
-  return `teslacam_${stamp}_${secs}s_${cams}kam.mp4`
+  const cams = req.cameras.length === 4 ? 'all' : req.cameras.length
+  return `teslacam_${stamp}_${secs}s_${cams}cam.mp4`
 }

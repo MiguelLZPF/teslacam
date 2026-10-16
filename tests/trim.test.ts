@@ -85,5 +85,5 @@ test('the filename says when the cut starts and how long it is', () => {
     overlay: {} as any, fromSec: 71, toSec: 75, lang: 'da',
   } as unknown as ExportRequest
   // 12:36:58 + one minute + eleven seconds.
-  assert.equal(exportName(req), 'teslacam_2026-08-11_12-38-09_4s_2kam.mp4')
+  assert.equal(exportName(req), 'teslacam_2026-08-11_12-38-09_4s_2cam.mp4')
 })

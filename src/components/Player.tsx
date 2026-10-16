@@ -253,7 +253,7 @@ export default function Player({
 
       {!present.length && (
         <p className="absolute inset-0 grid place-content-center text-faint">
-          Vælg mindst ét kamera
+          Choose at least one camera
         </p>
       )}
     </div>

@@ -16,10 +16,10 @@ import {
 import Thumb from './Thumb'
 
 const SOURCES: { id: Source | 'all'; da: string }[] = [
-  { id: 'all', da: 'Alle' },
-  { id: 'RecentClips', da: 'Seneste' },
-  { id: 'SavedClips', da: 'Gemte' },
-  { id: 'SentryClips', da: 'Vagt' },
+  { id: 'all', da: 'All' },
+  { id: 'RecentClips', da: 'Recent' },
+  { id: 'SavedClips', da: 'Saved' },
+  { id: 'SentryClips', da: 'Sentry' },
 ]
 
 const PAGE = 60
@@ -39,7 +39,7 @@ export default function Library({ events, onOpen, onReset }: {
       if (source !== 'all' && e.source !== source) return false
       if (!q) return true
       const hay = `${e.name} ${e.meta?.city ?? ''} ${e.meta?.reason ?? ''} `
-        + e.startedAt.toLocaleString('da-DK')
+        + e.startedAt.toLocaleString('en-GB')
       return hay.toLowerCase().includes(q)
     })
   }, [events, source, query])
@@ -54,12 +54,12 @@ export default function Library({ events, onOpen, onReset }: {
     <div className="mx-auto max-w-6xl px-3 pb-16 pt-4 sm:px-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <span className="eyebrow">teslacam.cscloud.dk</span>
+          <span className="eyebrow">TeslaCam</span>
           <h1 className="text-2xl font-semibold tracking-tight">
-            {events.length} {events.length === 1 ? 'optagelse' : 'optagelser'}
+            {events.length} {events.length === 1 ? 'recording' : 'recordings'}
           </h1>
         </div>
-        <button className="btn" onClick={onReset}>Vælg en anden mappe</button>
+        <button className="btn" onClick={onReset}>Choose another folder</button>
       </header>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -73,15 +73,15 @@ export default function Library({ events, onOpen, onReset }: {
         <input
           className="chip ml-auto !min-w-[14rem] !px-3"
           type="search"
-          placeholder="Søg dato, sted eller årsag"
+          placeholder="Search date, place or reason"
           value={query}
           onChange={(e) => { setQuery(e.target.value); setShown(PAGE) }}
-          aria-label="Søg"
+          aria-label="Search"
         />
       </div>
 
       {filtered.length === 0 ? (
-        <p className="mt-10 text-center text-muted">Ingen optagelser matcher.</p>
+        <p className="mt-10 text-center text-muted">No recordings match.</p>
       ) : (
         <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.slice(0, shown).map((e) => (
@@ -95,12 +95,12 @@ export default function Library({ events, onOpen, onReset }: {
                   <p className="truncate font-medium">{when(e)}</p>
                   <p className="num mt-0.5 truncate text-xs text-faint">
                     {Math.round(eventSeconds(e) / 60)} min ·{' '}
-                    {camerasIn(e).length} kameraer
+                    {camerasIn(e).length} cameras
                     {e.meta?.city ? ` · ${e.meta.city}` : ''}
                   </p>
                   {e.meta?.reason && (
                     <p className="mt-1 truncate text-xs text-muted">
-                      {REASON_LABEL[e.meta.reason]?.da ?? e.meta.reason.replace(/_/g, ' ')}
+                      {REASON_LABEL[e.meta.reason]?.en ?? e.meta.reason.replace(/_/g, ' ')}
                     </p>
                   )}
                 </div>
@@ -113,7 +113,7 @@ export default function Library({ events, onOpen, onReset }: {
       {shown < filtered.length && (
         <div className="mt-5 text-center">
           <button className="btn" onClick={() => setShown(shown + PAGE)}>
-            Vis flere ({filtered.length - shown} tilbage)
+            Show more ({filtered.length - shown} left)
           </button>
         </div>
       )}
@@ -122,7 +122,7 @@ export default function Library({ events, onOpen, onReset }: {
 }
 
 function when(e: TeslaEvent): string {
-  const s = e.startedAt.toLocaleString('da-DK', {
+  const s = e.startedAt.toLocaleString('en-GB', {
     weekday: 'short', day: 'numeric', month: 'short',
     hour: '2-digit', minute: '2-digit',
   })

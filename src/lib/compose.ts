@@ -112,13 +112,13 @@ export function drawOverlay(
   size: { w: number; h: number },
   frame: OverlayFrame,
   opts: OverlayOptions,
-  lang: 'da' | 'en' = 'da',
+  lang: 'da' | 'en' = 'en',
 ) {
   const pad = Math.round(size.h * 0.025)
   const unitScale = size.h / 960
 
   if (opts.clock) {
-    const stamp = frame.at.toLocaleString(lang === 'da' ? 'da-DK' : 'en-GB', {
+    const stamp = frame.at.toLocaleString('en-GB', {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
     })
@@ -151,8 +151,8 @@ export function drawOverlay(
     ctx.textBaseline = 'middle'
     ctx.fillText(
       frame.noTelemetry
-        ? (lang === 'da' ? 'ingen telemetri' : 'no telemetry')
-        : (lang === 'da' ? 'ingen data' : 'no data'),
+        ? 'no telemetry'
+        : 'no data',
       bx + boxW / 2, by + boxH / 2,
     )
     ctx.restore()
@@ -181,7 +181,7 @@ export function drawOverlay(
 
     ctx.fillStyle = '#a8b3b7'
     ctx.font = `${Math.round(20 * unitScale)}px ui-monospace, monospace`
-    ctx.fillText(opts.unit === 'kmh' ? 'km/t' : 'mph',
+    ctx.fillText(opts.unit === 'kmh' ? 'km/h' : 'mph',
                  x + numW + Math.round(10 * unitScale), by + boxH / 2 + Math.round(10 * unitScale))
   }
 

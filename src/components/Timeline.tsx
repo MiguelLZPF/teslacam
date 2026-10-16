@@ -20,12 +20,12 @@ import type { ActionKind } from '../lib/sei'
  *  indicators (as the car's own tell-tale), red for braking, orange for
  *  reversing, teal for autopilot on (the app's live colour), grey for off. */
 const ACTION_LABEL: Record<ActionKind, string> = {
-  blinker_left: 'Blink venstre',
-  blinker_right: 'Blink højre',
-  brake: 'Bremser',
-  reverse: 'Bakker',
-  autopilot_on: 'Autopilot til',
-  autopilot_off: 'Autopilot fra',
+  blinker_left: 'Left indicator',
+  blinker_right: 'Right indicator',
+  brake: 'Braking',
+  reverse: 'Reversing',
+  autopilot_on: 'Autopilot on',
+  autopilot_off: 'Autopilot off',
 }
 const ACTION_COLOR: Record<ActionKind, string> = {
   blinker_left: '#e8a33d',
@@ -204,7 +204,7 @@ export default function Timeline({
           key={what}
           role="slider"
           tabIndex={disabled ? -1 : 0}
-          aria-label={what === 'in' ? 'Startmarkør' : 'Slutmarkør'}
+          aria-label={what === 'in' ? 'Start marker' : 'End marker'}
           aria-valuemin={0}
           aria-valuemax={Math.round(span)}
           aria-valuenow={Math.round(at)}
@@ -223,19 +223,19 @@ export default function Timeline({
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
         <button className="chip" onClick={() => onIn(Math.min(time, outSec - MIN_SELECTION))}
-                disabled={disabled} title="Tast I">
-          [ Start her
+                disabled={disabled} title="Key I">
+          [ Start here
         </button>
         <button className="chip" onClick={() => onOut(Math.max(time, inSec + MIN_SELECTION))}
-                disabled={disabled} title="Tast O">
-          Slut her ]
+                disabled={disabled} title="Key O">
+          End here ]
         </button>
         <button className="chip" onClick={onWhole} disabled={disabled}>
-          Hele optagelsen
+          Whole recording
         </button>
         <p className="num ml-auto text-sm text-muted">
           {clock(inSec)} – {clock(outSec)}
-          <span className="ml-2 text-faint">({clock(outSec - inSec)} valgt)</span>
+          <span className="ml-2 text-faint">({clock(outSec - inSec)} selected)</span>
         </p>
       </div>
 
@@ -248,7 +248,7 @@ export default function Timeline({
               {ACTION_LABEL[k]}
             </span>
           ))}
-          <span className="text-faint">· klik en markør for at hoppe dertil</span>
+          <span className="text-faint">· click a marker to jump to it</span>
         </div>
       )}
     </div>

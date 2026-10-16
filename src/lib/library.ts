@@ -31,9 +31,9 @@ export type Camera = (typeof CAMERAS)[number]
  *  ("repeater" is the indicator housing); the labels match the car's UI. */
 export const CAMERA_LABEL: Record<Camera, { da: string; en: string }> = {
   front: { da: 'Front', en: 'Front' },
-  left_repeater: { da: 'Venstre', en: 'Left' },
-  right_repeater: { da: 'Højre', en: 'Right' },
-  back: { da: 'Bag', en: 'Back' },
+  left_repeater: { da: 'Left', en: 'Left' },
+  right_repeater: { da: 'Right', en: 'Right' },
+  back: { da: 'Back', en: 'Back' },
 }
 
 export type Source = 'RecentClips' | 'SavedClips' | 'SentryClips'
@@ -69,10 +69,10 @@ export interface EventMeta {
 
 /** Sentry's own words for why it started recording. */
 export const REASON_LABEL: Record<string, { da: string; en: string }> = {
-  sentry_aware_object_detection: { da: 'Bevægelse registreret', en: 'Motion detected' },
-  user_interaction_dashcam_icon_tapped: { da: 'Du trykkede på dashcam-ikonet', en: 'Dashcam icon tapped' },
-  user_interaction_honk: { da: 'Hornet blev brugt', en: 'Horn used' },
-  sentry_accel_threshold: { da: 'Bilen blev rørt', en: 'Impact detected' },
+  sentry_aware_object_detection: { da: 'Motion detected', en: 'Motion detected' },
+  user_interaction_dashcam_icon_tapped: { da: 'Dashcam icon tapped', en: 'Dashcam icon tapped' },
+  user_interaction_honk: { da: 'Horn used', en: 'Horn used' },
+  sentry_accel_threshold: { da: 'Impact detected', en: 'Impact detected' },
 }
 
 const NAME = /^(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})-(.+)\.mp4$/i

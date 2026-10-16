@@ -21,10 +21,10 @@ import {
 import { speedIn, type Telemetry } from './lib/sei'
 
 const LAYOUTS: { id: LayoutName; da: string }[] = [
-  { id: 'tesla', da: 'Bilens layout' },
-  { id: 'grid', da: 'Gitter' },
-  { id: 'wide', da: 'På række' },
-  { id: 'single', da: 'Ét kamera' },
+  { id: 'tesla', da: 'Car layout' },
+  { id: 'grid', da: 'Grid' },
+  { id: 'wide', da: 'In a row' },
+  { id: 'single', da: 'One camera' },
 ]
 
 const RATES = [0.5, 1, 2, 4] as const
@@ -133,12 +133,12 @@ export default function App() {
     <div className="mx-auto max-w-6xl px-3 pb-16 pt-3 sm:px-5">
       <header className="mb-3 flex flex-wrap items-center gap-3">
         <button className="btn" onClick={() => { setSelected(null); setPlaying(false) }}>
-          ← Alle optagelser
+          ← All recordings
         </button>
         <div className="min-w-0">
           <p className="truncate font-medium">{titleOf(selected)}</p>
           <p className="num truncate text-xs text-faint">
-            {selected.segments.length} klip · {Math.round(duration)} sekunder
+            {selected.segments.length} clips · {Math.round(duration)} seconds
             {selected.meta?.city ? ` · ${selected.meta.city}` : ''}
           </p>
         </div>
@@ -151,8 +151,8 @@ export default function App() {
           during an export anyway. */}
       {exporting ? (
         <div className="grid aspect-[2/1] w-full place-content-center rounded-xl border border-line bg-surface text-center text-muted">
-          <p>Eksporterer…</p>
-          <p className="mt-1 text-sm text-faint">Afspilningen er sat på pause så længe.</p>
+          <p>Exporting…</p>
+          <p className="mt-1 text-sm text-faint">Playback is paused meanwhile.</p>
         </div>
       ) : (
         <Player
@@ -160,7 +160,7 @@ export default function App() {
           cameras={cameras}
           layout={layout}
           overlay={opts}
-          lang="da"
+          lang="en"
           onTime={onTime}
           onTelemetry={onTelemetry}
           seekTo={seekTo}
@@ -174,7 +174,7 @@ export default function App() {
       <div className="card mt-3 px-4 py-3">
         <div className="mb-3 flex items-center gap-3">
           <button className="btn shrink-0" onClick={() => setPlaying(!playing)}
-                  aria-label={playing ? 'Pause' : 'Afspil'}>
+                  aria-label={playing ? 'Pause' : 'Play'}>
             {playing ? '❚❚' : '▶'}
           </button>
           <span className="num shrink-0 text-sm text-muted">
@@ -198,7 +198,7 @@ export default function App() {
 
         <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
           <div className="flex items-center gap-1.5">
-            <span className="eyebrow">Fart</span>
+            <span className="eyebrow">Speed</span>
             {RATES.map((r) => (
               <button key={r} className="chip" aria-pressed={rate === r}
                       onClick={() => setRate(r)}>{r}×</button>
@@ -206,12 +206,12 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="eyebrow">Kameraer</span>
+            <span className="eyebrow">Cameras</span>
             {available.map((cam) => (
               <button key={cam} className="chip" aria-pressed={cameras.includes(cam)}
                       onClick={() => setCameras((c) =>
                         c.includes(cam) ? c.filter((x) => x !== cam) : [...c, cam])}>
-                {CAMERA_LABEL[cam].da}
+                {CAMERA_LABEL[cam].en}
               </button>
             ))}
           </div>
@@ -241,27 +241,27 @@ export default function App() {
       {/* Readout and overlay switches */}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="card px-4 py-3">
-          <h2 className="eyebrow">Telemetri</h2>
+          <h2 className="eyebrow">Telemetry</h2>
           {noTelemetry ? (
             <p className="mt-2 text-sm text-muted">
-              Denne optagelse har ingen telemetri. Bilen skriver fart, gear og GPS
-              ind i videoen fra firmware 2025.44.25 — ældre klip har det ikke.
+              This recording has no telemetry. The car writes speed, gear and GPS
+              into the video from firmware 2025.44.25; older clips do not have it.
             </p>
           ) : telemetry ? (
             <div className="mt-2 flex flex-wrap items-baseline gap-x-6 gap-y-2">
               <p className="num text-3xl">
                 {speedIn(unit, telemetry.speedMps)}
-                <span className="ml-1 text-sm text-muted">{unit === 'kmh' ? 'km/t' : 'mph'}</span>
+                <span className="ml-1 text-sm text-muted">{unit === 'kmh' ? 'km/h' : 'mph'}</span>
               </p>
               <p className="num text-sm text-muted">
                 Gear {telemetry.gear === 'reverse' ? 'R'
                   : telemetry.gear === 'drive' ? 'D'
                   : telemetry.gear === 'park' ? 'P' : 'N'}
               </p>
-              <p className="num text-sm text-muted">Rat {telemetry.steeringDeg.toFixed(0)}°</p>
-              {telemetry.braking && <p className="text-sm text-warn">Bremser</p>}
-              {telemetry.blinkerLeft && <p className="text-sm text-warn">Blink venstre</p>}
-              {telemetry.blinkerRight && <p className="text-sm text-warn">Blink højre</p>}
+              <p className="num text-sm text-muted">Steering {telemetry.steeringDeg.toFixed(0)}°</p>
+              {telemetry.braking && <p className="text-sm text-warn">Braking</p>}
+              {telemetry.blinkerLeft && <p className="text-sm text-warn">Left indicator</p>}
+              {telemetry.blinkerRight && <p className="text-sm text-warn">Right indicator</p>}
               {telemetry.autopilot !== 'none' && (
                 <p className="text-sm text-live">{apLabel(telemetry.autopilot)}</p>
               )}
@@ -271,17 +271,17 @@ export default function App() {
             </div>
           ) : (
             <p className="mt-2 text-sm text-faint">
-              Ingen data på dette tidspunkt — bilen holdt formentlig stille.
+              No data at this moment; the car was probably standing still.
             </p>
           )}
         </div>
 
         <div className="card px-4 py-3">
-          <h2 className="eyebrow">Vis på billedet</h2>
+          <h2 className="eyebrow">Show on the picture</h2>
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm">
             {([
-              ['speed', 'Fart'], ['gear', 'Gear'], ['clock', 'Dato og tid'],
-              ['place', 'Sted'], ['labels', 'Kameranavne'],
+              ['speed', 'Speed'], ['gear', 'Gear'], ['clock', 'Date and time'],
+              ['place', 'Place'], ['labels', 'Camera names'],
             ] as const).map(([key, label]) => (
               <label key={key} className="flex items-center gap-2">
                 <input type="checkbox" checked={overlay[key]}
@@ -291,9 +291,9 @@ export default function App() {
             ))}
           </div>
           <div className="mt-3 flex items-center gap-1.5">
-            <span className="eyebrow">Enhed</span>
+            <span className="eyebrow">Unit</span>
             <button className="chip" aria-pressed={unit === 'kmh'}
-                    onClick={() => setUnit('kmh')}>km/t</button>
+                    onClick={() => setUnit('kmh')}>km/h</button>
             <button className="chip" aria-pressed={unit === 'mph'}
                     onClick={() => setUnit('mph')}>mph</button>
           </div>
@@ -304,7 +304,7 @@ export default function App() {
 }
 
 function titleOf(e: TeslaEvent): string {
-  const when = e.startedAt.toLocaleString('da-DK', {
+  const when = e.startedAt.toLocaleString('en-GB', {
     weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
   })
   return when.charAt(0).toUpperCase() + when.slice(1)
@@ -312,6 +312,6 @@ function titleOf(e: TeslaEvent): string {
 
 function apLabel(state: string): string {
   return state === 'self_driving' ? 'FSD'
-    : state === 'autosteer' ? 'Autostyring'
-    : state === 'tacc' ? 'Fartpilot' : ''
+    : state === 'autosteer' ? 'Autosteer'
+    : state === 'tacc' ? 'Cruise control' : ''
 }
