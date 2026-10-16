@@ -36,7 +36,7 @@ export const CAMERA_LABEL: Record<Camera, { da: string; en: string }> = {
   back: { da: 'Back', en: 'Back' },
 }
 
-export type Source = 'RecentClips' | 'SavedClips' | 'SentryClips'
+export type Source = 'RecentClips' | 'SavedClips' | 'SentryClips' | 'Events'
 
 export interface Segment {
   /** The shared filename prefix, e.g. 2026-08-11_12-36-58. */
@@ -56,6 +56,29 @@ export interface TeslaEvent {
   segments: Segment[]
   thumb?: File
   meta?: EventMeta
+  /** Present when the folder holds a triage verdict.json. */
+  verdict?: Verdict
+}
+
+/**
+ * What the footage triage wrote into an event folder's verdict.json. The file
+ * carries the class and a label such as `badas_0.96_t60s` or
+ * `impact_12.3ms2_t35s`; the score and the peak second are read out of that label.
+ * `peakSec` is relative to the start of the trigger window's clip, not to the
+ * event, so it is only usable as a seek target when the trigger window is known:
+ * a `trigger_key` in the file, or an event that holds a single window. Otherwise
+ * `jump` stays unset and the viewer shows the numbers without moving the playhead.
+ */
+export interface Verdict {
+  cls: string
+  label: string
+  kind?: 'badas' | 'impact'
+  /** BADAS max probability (kind badas). */
+  prob?: number
+  /** Peak horizontal acceleration in m/s2 (kind impact). */
+  accel?: number
+  peakSec?: number
+  jump?: { segmentIndex: number; atSec: number }
 }
 
 export interface EventMeta {
@@ -112,100 +135,171 @@ export interface ScanProgress {
   events: number
 }
 
+/** How many folder levels below the picked folder are searched. Three covers
+ *  root/Events/<event>/clips and root/RecentClips/<date>/clips. */
+export const MAX_DEPTH = 3
+
+/** Start-to-start distance between two clips beyond which a plain folder (no
+ *  verdict.json, no event.json) is cut into separate entries. A segment is about
+ *  60 s and 61-70 s between neighbours is normal, so 100 s means a minute is missing. */
+export const SPLIT_GAP_S = 100
+
+/** Seconds of run-up before a known peak when an event opens. */
+export const JUMP_LEAD_S = 5
+
+const SOURCE_DIRS: Source[] = ['RecentClips', 'SavedClips', 'SentryClips', 'Events']
+
 /**
- * Walk a directory handle into events.
+ * Walk a directory handle into events, however deep the clips sit.
  *
- * Nothing is read here beyond names and the small event.json - the videos stay
- * on disk as File handles until something asks to play or export them. A sentry
- * folder can hold several gigabytes and this has to feel instant.
+ * The picked folder can be one event, one of RecentClips/SavedClips/SentryClips/
+ * Events, or their parent. Folders are listed lazily, one at a time, down to
+ * MAX_DEPTH; a folder that holds Tesla clip files is an entry and is not searched
+ * further. Nothing is read here beyond names and the small event.json and
+ * verdict.json files - the videos stay on disk as File handles until something
+ * asks to play or export them.
  */
 export async function scanLibrary(
   root: FileSystemDirectoryHandle,
   onProgress?: (p: ScanProgress) => void,
 ): Promise<TeslaEvent[]> {
   const events: TeslaEvent[] = []
-
-  // A folder chosen *inside* TeslaCam should still work - people pick
-  // SentryClips as often as the parent.
-  const top = await listDirs(root)
-  const sources = (['RecentClips', 'SavedClips', 'SentryClips'] as Source[])
-    .filter((s) => top.has(s))
-
-  if (!sources.length) {
-    // The picked folder may itself be one of the three, or a single event.
-    const own = await readEventFolder(root, guessSource(root.name), root.name)
-    return own ? [own] : []
-  }
-
-  for (const source of sources) {
-    const dir = top.get(source)!
-    onProgress?.({ folder: source, events: events.length })
-
-    if (source === 'RecentClips') {
-      const files = await listFiles(dir)
-      const segments = toSegments(files)
-      if (segments.length) {
-        events.push({
-          id: 'recent',
-          source,
-          name: 'RecentClips',
-          startedAt: segments[0].startedAt,
-          segments,
-          thumb: files.find((f) => f.name === 'thumb.png'),
-        })
-      }
-      continue
-    }
-
-    for (const [name, handle] of await listDirs(dir)) {
-      const ev = await readEventFolder(handle, source, name)
-      if (ev) {
-        events.push(ev)
-        if (events.length % 25 === 0) onProgress?.({ folder: source, events: events.length })
-      }
-    }
-  }
+  await walk(root, [root.name], 0, events, onProgress)
 
   // Newest first: the reason anyone opens this is something that just happened.
   events.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
   return events
 }
 
-function guessSource(name: string): Source {
-  if (name === 'SavedClips' || name === 'SentryClips' || name === 'RecentClips') return name
+async function walk(
+  dir: FileSystemDirectoryHandle,
+  trail: string[],
+  depth: number,
+  out: TeslaEvent[],
+  onProgress?: (p: ScanProgress) => void,
+): Promise<void> {
+  const entries: [string, any][] = []
+  for await (const e of (dir as any).entries()) entries.push(e)
+  onProgress?.({ folder: trail[trail.length - 1], events: out.length })
+
+  const holdsClips = entries.some(([n, h]) => h.kind === 'file' && NAME.test(n))
+  if (holdsClips) {
+    const files: File[] = []
+    for (const [n, h] of entries) {
+      if (h.kind === 'file' && (NAME.test(n) || SIDECARS.has(n))) files.push(await h.getFile())
+    }
+    // The folder that was picked itself stays one entry, as before; a folder
+    // found below it is split where footage is missing.
+    out.push(...await eventsFromFolderAsync(trail, files, depth > 0))
+    return
+  }
+
+  if (depth >= MAX_DEPTH) return
+  for (const [n, h] of entries) {
+    if (h.kind === 'directory' && !n.startsWith('.')) {
+      await walk(h, [...trail, n], depth + 1, out, onProgress)
+    }
+  }
+}
+
+const SIDECARS = new Set(['event.json', 'verdict.json', 'thumb.png'])
+
+function sourceFor(trail: string[]): Source {
+  for (let i = trail.length - 1; i >= 0; i--) {
+    const hit = SOURCE_DIRS.find((s) => s === trail[i])
+    if (hit) return hit
+  }
   return 'SavedClips'
 }
 
-async function readEventFolder(
-  dir: FileSystemDirectoryHandle, source: Source, name: string,
-): Promise<TeslaEvent | null> {
-  const files = await listFiles(dir)
+/** Cut a time-ordered segment list wherever the next clip starts more than
+ *  `gapS` seconds after the previous one. */
+export function splitByGap(segments: Segment[], gapS: number = SPLIT_GAP_S): Segment[][] {
+  const groups: Segment[][] = []
+  for (const seg of segments) {
+    const last = groups[groups.length - 1]
+    const prev = last?.[last.length - 1]
+    if (!last || !prev || seg.startedAt.getTime() - prev.startedAt.getTime() > gapS * 1000) {
+      groups.push([seg])
+    } else {
+      last.push(seg)
+    }
+  }
+  return groups
+}
+
+/** The label the triage writes: badas_<prob>_t<sec>s or impact_<m/s2>ms2_t<sec>s. */
+const LABEL_BADAS = /^badas_(\d+(?:\.\d+)?)_t(\d+(?:\.\d+)?)s$/
+const LABEL_IMPACT = /^impact_(\d+(?:\.\d+)?)ms2_t(\d+(?:\.\d+)?)s$/
+
+/** Read a verdict.json. Returns undefined for anything that is not usable, so a
+ *  damaged file never loses the event. */
+export function parseVerdict(text: string, segments: Segment[]): Verdict | undefined {
+  let j: any
+  try { j = JSON.parse(text) } catch { return undefined }
+  if (!j || typeof j !== 'object' || typeof j.class !== 'string') return undefined
+  const label = typeof j.label === 'string' ? j.label : ''
+  const v: Verdict = { cls: j.class, label }
+  const b = LABEL_BADAS.exec(label)
+  const im = LABEL_IMPACT.exec(label)
+  if (b) { v.kind = 'badas'; v.prob = Number(b[1]); v.peakSec = Number(b[2]) }
+  else if (im) { v.kind = 'impact'; v.accel = Number(im[1]); v.peakSec = Number(im[2]) }
+
+  if (v.peakSec !== undefined) {
+    // Which clip the peak second counts from. verdict.json does not say unless
+    // it carries trigger_key; a lone window is unambiguous.
+    let idx = -1
+    if (typeof j.trigger_key === 'string') idx = segments.findIndex((s) => s.key === j.trigger_key)
+    else if (segments.length === 1) idx = 0
+    if (idx >= 0) v.jump = { segmentIndex: idx, atSec: v.peakSec }
+  }
+  return v
+}
+
+async function readSmallText(file: File | undefined): Promise<string | undefined> {
+  if (!file || file.size > 65536) return undefined
+  try { return await file.text() } catch { return undefined }
+}
+
+async function eventsFromFolderAsync(
+  trail: string[], files: File[], split: boolean,
+): Promise<TeslaEvent[]> {
+  const name = trail[trail.length - 1]
   const segments = toSegments(files)
-  if (!segments.length) return null
+  if (!segments.length) return []
 
   let meta: EventMeta | undefined
   const metaFile = files.find((f) => f.name === 'event.json')
-  if (metaFile) {
+  const metaText = await readSmallText(metaFile)
+  if (metaText !== undefined) {
     try {
-      meta = JSON.parse(await metaFile.text()) as EventMeta
+      meta = JSON.parse(metaText) as EventMeta
     } catch {
       // A truncated event.json is common on a stick pulled mid-write. The
       // clips are still perfectly playable, so this must not lose the event.
       meta = undefined
     }
   }
+  const verdictFile = files.find((f) => f.name === 'verdict.json')
+  const verdictText = await readSmallText(verdictFile)
+  const verdict = verdictText === undefined ? undefined : parseVerdict(verdictText, segments)
 
-  return {
-    id: `${source}/${name}`,
+  const groups = split && !metaFile && !verdictFile ? splitByGap(segments) : [segments]
+  const source = sourceFor(trail)
+  const path = trail.join('/')
+  const thumb = files.find((f) => f.name === 'thumb.png')
+  return groups.map((segs, i) => ({
+    id: groups.length > 1 ? `${path}#${segs[0].key}` : path,
     source,
     name,
     // event.json's timestamp is when sentry triggered, which is a few seconds
     // into the recording. The first segment is when the video starts.
-    startedAt: segments[0].startedAt,
-    segments,
-    thumb: files.find((f) => f.name === 'thumb.png'),
+    startedAt: segs[0].startedAt,
+    segments: segs,
+    thumb: i === 0 ? thumb : undefined,
     meta,
-  }
+    verdict,
+  }))
 }
 
 async function listFiles(dir: FileSystemDirectoryHandle): Promise<File[]> {

@@ -11,7 +11,7 @@
 import { useMemo, useState } from 'react'
 import {
   REASON_LABEL, camerasIn, eventSeconds,
-  type Source, type TeslaEvent,
+  type Source, type TeslaEvent, type Verdict,
 } from '../lib/library'
 import Thumb from './Thumb'
 
@@ -20,6 +20,7 @@ const SOURCES: { id: Source | 'all'; da: string }[] = [
   { id: 'RecentClips', da: 'Recent' },
   { id: 'SavedClips', da: 'Saved' },
   { id: 'SentryClips', da: 'Sentry' },
+  { id: 'Events', da: 'Events' },
 ]
 
 const PAGE = 60
@@ -38,7 +39,7 @@ export default function Library({ events, onOpen, onReset }: {
     return events.filter((e) => {
       if (source !== 'all' && e.source !== source) return false
       if (!q) return true
-      const hay = `${e.name} ${e.meta?.city ?? ''} ${e.meta?.reason ?? ''} `
+      const hay = `${e.name} ${e.verdict?.label ?? ''} ${e.verdict?.cls ?? ''} ${e.meta?.city ?? ''} ${e.meta?.reason ?? ''} `
         + e.startedAt.toLocaleString('en-GB')
       return hay.toLowerCase().includes(q)
     })
@@ -93,11 +94,15 @@ export default function Library({ events, onOpen, onReset }: {
                 <Thumb event={e} />
                 <div className="px-3 py-2.5">
                   <p className="truncate font-medium">{when(e)}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted" title={e.name}>{e.name}</p>
                   <p className="num mt-0.5 truncate text-xs text-faint">
                     {Math.round(eventSeconds(e) / 60)} min ·{' '}
                     {camerasIn(e).length} cameras
                     {e.meta?.city ? ` · ${e.meta.city}` : ''}
                   </p>
+                  {e.verdict && (
+                    <p className="mt-1 truncate text-xs text-live">{verdictText(e.verdict)}</p>
+                  )}
                   {e.meta?.reason && (
                     <p className="mt-1 truncate text-xs text-muted">
                       {REASON_LABEL[e.meta.reason]?.en ?? e.meta.reason.replace(/_/g, ' ')}
@@ -119,6 +124,13 @@ export default function Library({ events, onOpen, onReset }: {
       )}
     </div>
   )
+}
+
+function verdictText(v: Verdict): string {
+  const cls = v.cls.charAt(0).toUpperCase() + v.cls.slice(1)
+  if (v.kind === 'badas') return `${cls} · BADAS ${v.prob!.toFixed(2)} at ${v.peakSec}s`
+  if (v.kind === 'impact') return `${cls} · impact ${v.accel!.toFixed(1)} m/s² at ${v.peakSec}s`
+  return v.label ? `${cls} · ${v.label}` : cls
 }
 
 function when(e: TeslaEvent): string {

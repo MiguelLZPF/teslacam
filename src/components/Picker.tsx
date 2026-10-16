@@ -52,7 +52,9 @@ function handleFromFileList(files: FileList): any {
       }
     },
   })
-  return wrap(top, 'TeslaCam')
+  // Keep the real name of the picked folder: the scanner uses it to tell Events
+  // from RecentClips and so on.
+  return wrap(top, top === root ? 'TeslaCam' : [...root.dirs.keys()][0])
 }
 
 export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) => void }) {
@@ -66,8 +68,9 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
     try {
       const events = await scanLibrary(handle, setBusy)
       if (!events.length) {
-        setError('There are no TeslaCam recordings in that folder. Choose the folder '
-          + 'named TeslaCam, or one of RecentClips, SavedClips and SentryClips.')
+        setError('There are no TeslaCam clips in that folder or up to three levels below it. '
+          + 'Choose the folder named TeslaCam, or one of RecentClips, SavedClips, '
+          + 'SentryClips or Events.')
         return
       }
       onLoaded(events)
@@ -95,8 +98,9 @@ export default function Picker({ onLoaded }: { onLoaded: (events: TeslaEvent[]) 
       <span className="eyebrow">TeslaCam</span>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight">Your dashcam recordings</h1>
       <p className="mt-3 text-muted">
-        Point at your TeslaCam folder: on the USB stick, an SD card or a folder on
-        the computer. The videos stay where they are.
+        Point at a folder: one event, a parent such as Events or RecentClips, or the
+        whole TeslaCam folder. Every event below it, up to three levels down, is listed.
+        The videos stay where they are.
       </p>
       <p className="mt-2 text-sm text-faint">
         Everything happens in your browser. Not a single video is sent anywhere;

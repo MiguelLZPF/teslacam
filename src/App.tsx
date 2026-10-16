@@ -15,7 +15,8 @@ import Player from './components/Player'
 import Timeline, { clock } from './components/Timeline'
 import type { LayoutName, OverlayOptions, Unit } from './lib/compose'
 import {
-  CAMERA_LABEL, CAMERAS, camerasIn, collectActions, eventSeconds, measureDurations,
+  CAMERA_LABEL, CAMERAS, JUMP_LEAD_S, camerasIn, collectActions, eventSeconds, measureDurations,
+  segmentStart,
   type Camera, type EventAction, type TeslaEvent,
 } from './lib/library'
 import { speedIn, type Telemetry } from './lib/sei'
@@ -72,8 +73,12 @@ export default function App() {
   const openEvent = (e: TeslaEvent) => {
     setSelected(e)
     setCameras(camerasIn(e))
-    setTime(0)
-    setSeekTo(0)
+    // An event with a known peak opens a few seconds before it. The position uses
+    // the assumed minute per segment until the real lengths are measured.
+    const j = e.verdict?.jump
+    const start = j ? Math.max(0, segmentStart(e, j.segmentIndex) + j.atSec - JUMP_LEAD_S) : 0
+    setTime(start)
+    setSeekTo(start)
     setPlaying(true)
     setInSec(0)
     setOutSec(null)
