@@ -24,7 +24,9 @@
 
 import { detectActions, extractTelemetry, type ActionKind } from './sei'
 
-export const CAMERAS = ['front', 'left_repeater', 'right_repeater', 'back'] as const
+export const CAMERAS = [
+  'front', 'left_repeater', 'right_repeater', 'back', 'left_pillar', 'right_pillar',
+] as const
 export type Camera = (typeof CAMERAS)[number]
 
 /** What each camera is called on screen. Tesla's own names are positional
@@ -34,7 +36,12 @@ export const CAMERA_LABEL: Record<Camera, { da: string; en: string }> = {
   left_repeater: { da: 'Left', en: 'Left' },
   right_repeater: { da: 'Right', en: 'Right' },
   back: { da: 'Back', en: 'Back' },
+  left_pillar: { da: 'Left pillar', en: 'Left pillar' },
+  right_pillar: { da: 'Right pillar', en: 'Right pillar' },
 }
+
+/** The four cameras every car has; the pillar cameras are opt-in. */
+export const BASE_CAMERAS: readonly Camera[] = ['front', 'left_repeater', 'right_repeater', 'back']
 
 export type Source = 'RecentClips' | 'SavedClips' | 'SentryClips' | 'Events'
 

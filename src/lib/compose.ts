@@ -37,15 +37,27 @@ export const ASPECT = FRAME.w / FRAME.h
  * with all four; with fewer, a plain grid reads better, so the caller is
  * expected to fall back - `layoutFor` does that.
  */
-export function layoutFor(name: LayoutName, cams: Camera[]): Map<Camera, Rect> {
+export function layoutFor(name: LayoutName, cams: Camera[], main?: Camera): Map<Camera, Rect> {
   const out = new Map<Camera, Rect>()
   if (!cams.length) return out
 
+  // The camera the operator made the main view goes first, so 'single', 'wide'
+  // and 'grid' lead with it too. Falls back to the usual order when it is not
+  // among the selected cameras.
+  const lead = main && cams.includes(main) ? main : undefined
+  if (lead) cams = [lead, ...cams.filter((c) => c !== lead)]
+
   if (name === 'tesla' && cams.length === 4) {
-    out.set('front', { x: 0.25, y: 0, w: 0.5, h: 0.5 })
-    out.set('right_repeater', { x: 0, y: 0.5, w: 1 / 3, h: 0.5 })
-    out.set('back', { x: 1 / 3, y: 0.5, w: 1 / 3, h: 0.5 })
-    out.set('left_repeater', { x: 2 / 3, y: 0.5, w: 1 / 3, h: 0.5 })
+    const top = lead ?? (cams.includes('front') ? 'front' : cams[0])
+    out.set(top, { x: 0.25, y: 0, w: 0.5, h: 0.5 })
+    // The rest sit beneath in the car's own order: right, back, left, then front.
+    const ring: Camera[] = ['right_repeater', 'back', 'left_repeater', 'front']
+    const rest = cams.filter((c) => c !== top)
+    rest.sort((a, b) => {
+      const ia = ring.indexOf(a); const ib = ring.indexOf(b)
+      return (ia < 0 ? 9 : ia) - (ib < 0 ? 9 : ib)
+    })
+    rest.forEach((c, i) => out.set(c, { x: i / 3, y: 0.5, w: 1 / 3, h: 0.5 }))
     return out
   }
 

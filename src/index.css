@@ -25,7 +25,25 @@
 }
 
 :root {
-  /* Measured against #0b0d0e: ink 16.1:1, muted 7.4:1, faint 4.6:1, live 6.9:1. */
+  /* Dark, the default: true black. Measured against #000000 (panels #0a0a0a and
+     #161616): ink 19.3:1, muted 10.0:1, faint 6.5:1 (5.6:1 on the raised grey),
+     live 11.4:1, warn 9.7:1. Borders are decoration and sit at about 2:1. */
+  --c-ground: #000000;
+  --c-surface: #0a0a0a;
+  --c-raised: #161616;
+  --c-line: #3d3d3d;
+  --c-ink: #f5f5f5;
+  --c-muted: #b3b3b3;
+  --c-faint: #8f8f8f;
+  --c-live: #5ad1c4;
+  --c-warn: #e8a33d;
+
+  --font-numeric: ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono', monospace;
+  color-scheme: dark;
+}
+
+/* The original theme. Measured against #0b0d0e: ink 16.1:1, muted 7.4:1, faint 4.6:1, live 6.9:1. */
+:root[data-theme='classic'] {
   --c-ground: #0b0d0e;
   --c-surface: #14181a;
   --c-raised: #1d2225;
@@ -33,11 +51,6 @@
   --c-ink: #f0f3f4;
   --c-muted: #a8b3b7;
   --c-faint: #7d8a8f;
-  --c-live: #5ad1c4;
-  --c-warn: #e8a33d;
-
-  --font-numeric: ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono', monospace;
-  color-scheme: dark;
 }
 
 html {

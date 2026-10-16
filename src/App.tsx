@@ -14,8 +14,9 @@ import Picker from './components/Picker'
 import Player from './components/Player'
 import Timeline, { clock } from './components/Timeline'
 import type { LayoutName, OverlayOptions, Unit } from './lib/compose'
+import { loadMainCamera, saveMainCamera } from './lib/prefs'
 import {
-  CAMERA_LABEL, CAMERAS, JUMP_LEAD_S, camerasIn, collectActions, eventSeconds, measureDurations,
+  BASE_CAMERAS, CAMERA_LABEL, CAMERAS, JUMP_LEAD_S, camerasIn, collectActions, eventSeconds, measureDurations,
   segmentStart,
   type Camera, type EventAction, type TeslaEvent,
 } from './lib/library'
@@ -33,7 +34,9 @@ const RATES = [0.5, 1, 2, 4] as const
 export default function App() {
   const [library, setLibrary] = useState<TeslaEvent[] | null>(null)
   const [selected, setSelected] = useState<TeslaEvent | null>(null)
-  const [cameras, setCameras] = useState<Camera[]>([...CAMERAS])
+  const [cameras, setCameras] = useState<Camera[]>([...BASE_CAMERAS])
+  const [main, setMainState] = useState<Camera>(loadMainCamera)
+  const setMain = (c: Camera) => { setMainState(c); saveMainCamera(c) }
   const [layout, setLayout] = useState<LayoutName>('tesla')
   const [unit, setUnit] = useState<Unit>('kmh')
   const [overlay, setOverlay] = useState<Omit<OverlayOptions, 'unit'>>({
@@ -72,7 +75,10 @@ export default function App() {
 
   const openEvent = (e: TeslaEvent) => {
     setSelected(e)
-    setCameras(camerasIn(e))
+    // The pillar cameras are available as chips but start switched off.
+    const here = camerasIn(e)
+    const base = here.filter((c) => BASE_CAMERAS.includes(c))
+    setCameras(base.length ? base : here)
     // An event with a known peak opens a few seconds before it. The position uses
     // the assumed minute per segment until the real lengths are measured.
     const j = e.verdict?.jump
@@ -164,6 +170,8 @@ export default function App() {
           event={selected}
           cameras={cameras}
           layout={layout}
+          main={main}
+          onMain={setMain}
           overlay={opts}
           lang="en"
           onTime={onTime}
@@ -228,6 +236,15 @@ export default function App() {
               {LAYOUTS.map((l) => <option key={l.id} value={l.id}>{l.da}</option>)}
             </select>
           </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="eyebrow">Main view</span>
+            <select className="chip !px-2" aria-label="Main camera"
+                    value={available.includes(main) ? main : (available[0] ?? main)}
+                    onChange={(e) => setMain(e.target.value as Camera)}>
+              {available.map((c) => <option key={c} value={c}>{CAMERA_LABEL[c].en}</option>)}
+            </select>
+          </div>
         </div>
 
         {/* The export acts on the selection above it, so it lives in the same
@@ -236,6 +253,7 @@ export default function App() {
           event={selected}
           cameras={cameras}
           layout={layout}
+          main={main}
           overlay={opts}
           fromSec={inSec}
           toSec={outSec ?? duration}

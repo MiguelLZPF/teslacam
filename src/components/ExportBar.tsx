@@ -13,11 +13,12 @@ import { canExport, exportName, exportVideo, type ExportProgress } from '../lib/
 import type { Camera, TeslaEvent } from '../lib/library'
 
 export default function ExportBar({
-  event, cameras, layout, overlay, fromSec, toSec, onBusy,
+  event, cameras, layout, main, overlay, fromSec, toSec, onBusy,
 }: {
   event: TeslaEvent
   cameras: Camera[]
   layout: LayoutName
+  main?: Camera
   overlay: OverlayOptions
   fromSec: number
   toSec: number
@@ -37,7 +38,7 @@ export default function ExportBar({
     setError(null)
     if (done) { URL.revokeObjectURL(done.url); setDone(null) }
     abort.current = new AbortController()
-    const req = { event, cameras, layout, overlay, fromSec, toSec, lang: 'en' as const }
+    const req = { event, cameras, layout, main, overlay, fromSec, toSec, lang: 'en' as const }
     onBusy(true)
     try {
       const blob = await exportVideo(req, setProgress, abort.current.signal)

@@ -34,6 +34,8 @@ export interface ExportRequest {
   cameras: Camera[]
   layout: LayoutName
   overlay: OverlayOptions
+  /** The camera shown large in the car layout. */
+  main?: Camera
   /** In and out points in whole-event seconds - the timeline's two handles.
    *  Cutting used to be by whole one-minute files, which meant exporting a
    *  four-second near-miss produced a minute of driving around it. */
@@ -327,7 +329,7 @@ export async function exportVideo(
   const cams = CAMERAS.filter((c) => req.cameras.includes(c))
   if (!cams.length) throw new Error('Choose at least one camera')
 
-  const layout = layoutFor(req.layout, cams)
+  const layout = layoutFor(req.layout, cams, req.main)
   const size = canvasSize(layout)
   const canvas = new OffscreenCanvas(size.w, size.h)
   const ctx = canvas.getContext('2d')!

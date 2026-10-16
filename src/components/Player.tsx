@@ -29,6 +29,10 @@ export interface PlayerProps {
   event: TeslaEvent
   cameras: Camera[]
   layout: LayoutName
+  /** The camera shown large in the car layout. */
+  main?: Camera
+  /** A click on a small tile in the car layout asks for it to become the main view. */
+  onMain?: (cam: Camera) => void
   overlay: OverlayOptions
   lang: 'da' | 'en'
   onTime: (t: number, total: number) => void
@@ -40,12 +44,14 @@ export interface PlayerProps {
 }
 
 export default function Player({
-  event, cameras, layout, overlay, lang,
+  event, cameras, layout, main, onMain, overlay, lang,
   onTime, onTelemetry, seekTo, playing, rate, onEnded,
 }: PlayerProps) {
   const present = useMemo(() => camerasIn(event).filter((c) => cameras.includes(c)), [event, cameras])
-  const boxes = useMemo(() => layoutFor(layout, present), [layout, present])
+  const boxes = useMemo(() => layoutFor(layout, present, main), [layout, present, main])
 
+  // Only the car layout has a large slot to swap into.
+  const swappable = Boolean(onMain) && layout === 'tesla' && present.length === 4
   const refs = useRef(new Map<Camera, HTMLVideoElement>())
   const hud = useRef<HTMLCanvasElement>(null)
   const [index, setIndex] = useState(0)
@@ -238,7 +244,9 @@ export default function Player({
                 }
                 if (playing) void e.currentTarget.play().catch(() => {})
               }}
-              className="absolute object-contain"
+              className={'absolute object-contain' + (swappable && box.y > 0 ? ' cursor-pointer' : '')}
+              title={swappable && box.y > 0 ? 'Make this the main view' : undefined}
+              onClick={swappable && box.y > 0 ? () => onMain?.(cam) : undefined}
               style={{
                 left: `${box.x * 100}%`,
                 top: `${box.y * 100}%`,
